@@ -64,6 +64,7 @@ Shift a given midi file up or down a given number of half steps. e.g.
 <pre><code>shiftPitch eFlat.midi -3</code></pre> will take a MIDI file that starts in E Flat and put it into a starting key of C. 
 
 <h3>PROGRAMMING AUTOHARP</h3>
+<pre><code>Programming AutoHarp</code></pre>
 
 Here it gets a bit technical. But also cool. Weigh your (possible lack of) technical knowledge against your desire for cool when deciding whether to continue reading. Have you decided? Good. Let us continue.
 
