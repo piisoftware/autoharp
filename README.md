@@ -33,7 +33,9 @@ Honest to God, I have no idea. It kind of just does. I wrote it and then A Mirac
 <h3>SEEDING THE SOFTWARE</h3>
 
 - AutoHarp cannot brain by itself. It has the dumb and needs a repository of MIDI drum loops in order to do anything interesting (PRO TIP: Google "Free MIDI drum loops" to find some). In order to add them, run the "import" tool found in this package.
-<pre><code>&gt;import /directory/where/your/loops/are</code></pre> 
+
+<code>&gt;import /directory/where/your/loops/are</code>
+
 - It will probably ask you for the name of a musical genre under which to file each loop unless (PRO TIP again) your loops are sorted into directories named for the genre they belong in.   
     - Example: if your Hip Hop loops are in a directory called "hiphop" (case and spacing don’t matter) and the first time it asks you what genre they are you type "Hip Hop", it'll magically* sort the rest of them. 
     - You can also name the files (or subdirectories they’re in) with things like “verse”, “chorus”, “fill,” and the program will categorize them appropriately.
@@ -43,7 +45,9 @@ Honest to God, I have no idea. It kind of just does. I wrote it and then A Mirac
 <h3>OKAY, NOW LET'S MAKE SOME MUSIC</h3>
 
 Generate a song:
-  <pre><code>./generate &lt;optional genre name&gt;</code></pre>
+
+  <code>./generate &lt;optional genre name&gt;</code>
+  
 - set the environment variable AUTOHARP_QUIET=omfgyes (or anything true) to be less chatty. 
 - set the environment variable MIDI_PLAYER to the name of your MIDI player if you have one and didn't specify it during the "./configure" stage (you can also just run configure again safely). 
 - Omit the genre name and AutoHarp will choose from one that it knows. Type in a bunk genre name to get a list of valid ones. 
@@ -52,19 +56,18 @@ Output of this song will be one MIDI file and one JSON file. Their locations wil
 
 Regenerate a song:
 
-  <pre><code>./regenerate &lt;a JSON file, either from the program or the user&gt;</code></pre>
+  <code>./regenerate &lt;a JSON file, either from the program or the user&gt;</code>
   
 The JSON file output by the program can be altered and run again. Different things will happen. For more information on this, do not stop reading at the end of this section, but instead continue to read.
 
 One other handy tool:
 
-  <pre><code>./shiftPitch &lt;path to midi file&gt; &lt;number of half steps&gt;</code></pre>
+  <code>./shiftPitch &lt;path to midi file&gt; &lt;number of half steps&gt;</code>
 
 Shift a given midi file up or down a given number of half steps. e.g. 
-<pre><code>shiftPitch eFlat.midi -3</code></pre> will take a MIDI file that starts in E Flat and put it into a starting key of C. 
+<code>shiftPitch eFlat.midi -3</code> will take a MIDI file that starts in E Flat and put it into a starting key of C. 
 
 <h3>PROGRAMMING AUTOHARP</h3>
-<pre><code>Programming AutoHarp</code></pre>
 
 Here it gets a bit technical. But also cool. Weigh your (possible lack of) technical knowledge against your desire for cool when deciding whether to continue reading. Have you decided? Good. Let us continue.
 
@@ -86,11 +89,12 @@ Q: Yeah, uh...how the fuck do I PROGRAM ANYTHING AT ALL?
 A: I'm glad you asked that. The best thing to do is generate a song first and then look at the JSON output. 
 
 Here's the chorus for a song I just generated:
-<pre><code>"chorus" : [
+
+<code>"chorus" : [
     "meter: 4/4, tempo: 93, swingPercentage: 9, swingNote: sixteenth, key: B Flat, genre: Big Easy",
     "|A# / / /|Gm / / /|D# / / /|A# / / /|A# / / /|Gm / / /|D# / / /|A# / / /|",        
     "|_b/2_b'/2f'/2d'/2d'/2_b/2_b/4f'/2f'/4|g/2G/2c/2_e/2_e/2g/2g/4c/2c/4|_e/2_E/2A/2c/2c/2_e/2_e/4A/2A/4|_b/2_B/2_e/2g/2g/2_b/2_b/4_e/2_e/4|_b/2_b'/2f'/2d'/2d'/2_b/2_b/4f'/2f'/4|g/2G/2c/2_e/2_e/2g/2g/4c/2c/4|_e/2_E/2A/2c/2c/2_e/2_e/4A/2A/4|_b/2_B/2_e/2g/2g/2_b/2_b/4_e/2_e/4|"
-],</code></pre>
+],</code>
 
 A musical element (like a chorus or a verse) in autoharp is a three (or more) element array:
 
@@ -135,10 +139,10 @@ A: That’s right; you do need to be careful about commas and squiggly brackets 
 
 The hook is a simple melody; observe that it stands in its own section in the JSON file and has no chord progression. It’s usually just two lines. Let’s look at the one from “fromHook.json”:
 
-<pre><code>"hook" : [
+<code>"hook" : [
   "meter: 4/4, tempo: 129, key: A Minor",
   "|ggd'd'|e'/2f'/2g'/2e'/2d'2|c'c'bb|aage'|"
-]</code></pre>
+]</code>
 
 At run time, the hook will be adapted onto the chord progression and key of each musical section, and repeated as many times as will fit into that section. It is played by the “hook” instrument (see below), so if the hook (instrument) is one of the players in a given song segment, you will hear the hook (music).
 
@@ -156,7 +160,7 @@ AutoHarp has seven instrument classes:
 - theme 
 
 Each can be assigned one of 128 MIDI instrument patches save DrumLoop, which will always, like, be drums. Each instrument plays according to rules as befit its role in the band. The band is represented as a list in the JSON file:
-<pre><code>"instruments" : [
+<code>"instruments" : [
  "uid: bass, instrumentClass: bass, patch: Electric Bass(finger)",
  "uid: drumLoop, instrumentClass: drumLoop, patch: Drum Loop", 
  "uid: hook, instrumentClass: hook, patch: Marimba", 
@@ -165,7 +169,7 @@ Each can be assigned one of 128 MIDI instrument patches save DrumLoop, which wil
  "uid: theme, instrumentClass: theme, patch: Electric Guitar(muted), themeIdentity: earworm", 
  "uid: theme2, instrumentClass: theme, patch: Kalimba, themeIdentity: slowTheme", 
  "uid: theme3, instrumentClass: theme, patch: Choir Aahs, themeIdentity: flowTheme"
- ],</code></pre>
+ ],</code>
 You can add or remove instruments as you wish. Patch values can be broad (“piano” or “guitar” and AutoHarp will choose one that matches ) or specific (e.g. “Electric Piano 2”, “Electric Guitar (muted)”). The list of MIDI instrument names can be found here: [http://www.midi.org/techspecs/gm1sound.php](http://www.midi.org/techspecs/gm1sound.php). The Theme instrument has several subtypes (which control what kind of theme it plays). They are:
 - ‘slowTheme’: plays in quarter or half notes 
 - ‘fastTheme’: plays in eighth or sixteenth notes 
@@ -179,7 +183,7 @@ You can add or remove instruments as you wish. Patch values can be broad (“pia
 
 The song is a list of the sections of the song, what kind of section it is, what instruments play, and what music it uses. Here’s a section of one (from full.json in the scaffolds directory):
 
-<pre><code>...
+<code>...
 {
  "firstHalfPlayers" : "bass, drumLoop, rhythm",
  "music" : "verse", 
@@ -187,7 +191,7 @@ The song is a list of the sections of the song, what kind of section it is, what
  "tag" : "intro",
  "transition": "up"
 },
-...</code></pre>
+...</code>
 
 AutoHarp will, whenever possible, split blocks of music into two halves and conduct each separately; sometimes instruments will start playing in the second half of the segment, as is seen above with the hook. The names here correlate to the “uid” values in the instrument list. The “music” corresponds to the key name of the music (verse, chorus, bridge), and the tag is what this section technically is. Transition is whether the song builds up, comes down, or stays where it is at the end of this section (valid transition values are “up”,”down”, and “straight”; “straight” is the default value).
 
