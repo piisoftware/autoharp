@@ -1,0 +1,95 @@
+#!/usr/bin/env perl
+use Test::More;
+use AutoHarp::Constants;
+use AutoHarp::Fuzzy;
+use_ok AutoHarp::Instrument;
+use_ok AutoHarp::MusicBox::Song::Segment;
+use_ok AutoHarp::MusicBox::Base;
+use_ok AutoHarp::Clock;
+use_ok AutoHarp::Genre;
+
+use JSON;
+use strict;
+use MIDI;
+
+my $testCount = 5;
+my $loop      = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $DRUM_LOOP);
+
+for (1..4) {
+  $loop->reset();
+  #tell the loop it's playing so it's not tempted to give us a lead-in
+  #if indeed it ever does that
+  $loop->isPlaying(1);
+  my $measures = int(rand(8)) + 1;
+  my $genreName = pickOne(AutoHarp::Genre::Genres());
+  ok($genreName,"Genre name is set to $genreName");
+  $testCount++;
+  my $genre     = AutoHarp::Genre->new($genreName);
+  my $clock = $genre->suggestClock();
+  my $guide = AutoHarp::Events::Guide->fromAttributes(
+						      $ATTR_CLOCK => $clock,
+						      $ATTR_BARS => $measures
+						     );
+  my $time = int(rand(10) + 1) * $clock->measureTime();
+  my $music   = AutoHarp::MusicBox::Base->new($ATTR_GUIDE => $guide);
+  my $segment = AutoHarp::MusicBox::Song::Segment->new();
+  $music->tag($SONG_ELEMENT_VERSE);
+  $music->genre($genre);
+  $segment->music($music);
+  $segment->time($time);
+  $segment->transitionOut('up');
+  my $notes = $loop->play($segment);
+  is($segment->duration(), $measures * $clock->measureTime(), "Segment is valid in its, like, length");
+  if (ok($segment->genre(),"Segment genre is not null")) {
+    is($segment->genre()->name, $genreName, "Segment has the correct genre, $genreName");
+    $testCount++;
+  }
+  my $timeok = cmp_ok($notes->time(), ">=", $segment->time(), "Drums don't come in too early");
+  $timeok &= cmp_ok($notes->reach(), "<=", $segment->reach(), "Drums don't exit too late");
+  $timeok &= cmp_ok($notes->duration(), ">", $segment->duration() - $clock->measureTime(), "Drums actually, like, exist, or whatever");
+  $testCount += 5;
+  if (!$timeok) {
+    $notes->dump();
+    print JSON->new()->pretty->encode($loop->patterns());
+    last;
+  }
+  my $seen = {};
+  my $dump = 1;
+  foreach my $n (@{$notes->notes()}) {
+    my $drumName = $MIDI::notenum2percussion{$n->pitch};
+    ok($drumName, "Pitch is a $drumName");
+    $dump &= ok(!$seen->{$n->time}{$n->pitch}++,sprintf("We have not seen a(n) %s at time %d, sig %s",$drumName,$n->time,$clock->meter()));
+    $testCount += 2;
+  }
+  if (!$dump) {
+    $notes->dump();
+    print JSON->new()->pretty->encode($loop->patterns());
+    last;
+  }
+  #go through each measure and make sure we've got beats at least every half-measure
+  my $redump = 1;
+  foreach my $m (@{$segment->music->eachMeasure()}) {
+    my $next = $m + $clock->measureTime();
+    my $half = ($m + $next) / 2;
+    $redump &= ok((scalar 
+		   grep {$_->time >= $m && $_->time < $half} 
+		   @{$notes->notes()}),
+		  "There are drum hits betwixt $m and $half");
+    $testCount++;
+    if ($half > ($segment->reach() - $clock->measureTime())) {
+      last;
+    }
+    $redump &= ok((scalar 
+		   grep {$_->time >= $half && $_->time < $next} 
+		   @{$notes->notes()}),
+		  "There are drum hits betwixt $half and $next");
+    $testCount++;
+  }
+  if (!$redump) {
+    $notes->dump();
+    print JSON->new()->pretty->encode($loop->patterns());
+    last;
+  }
+}
+done_testing($testCount);
+exit(0);

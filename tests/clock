@@ -1,0 +1,38 @@
+#!/usr/bin/env perl
+use Test::More;
+use_ok AutoHarp::Clock;
+use_ok AutoHarp::Constants;
+use_ok AutoHarp::Fuzzy;
+use MIDI;
+use Data::Dumper;
+
+my $testCt = 3;
+my @sigs = ('4/4',
+	    '5/4',
+	    '6/8',
+	    '7/8',
+	    '11/4',
+	    '13/8',
+	    '2/4',
+	    '17/2');
+my $ct = 0;
+foreach my $clock (map {AutoHarp::Clock->new($ATTR_METER => $_)} @sigs) {
+  my $tempo = 120 + (pickOne(1,-1) * int(rand(30)));
+  $clock->tempo($tempo);
+  my $notb = $clock->noteOfTheBeat();
+  my $bPer = $clock->beatsPerMeasure();
+  my $sig  = $sigs[$ct++];
+  my $measures = 4 + int(rand(4));
+  my $mTicks = $measures * $clock->measureTime();
+  my ($spelledB,$spelledN) = ($sig =~ m|(\d+)/(\d+)|);
+  is($clock->tempo,$tempo,"Tempo set correctly post-hock");
+  is($notb, $spelledN, "Note of the beat set correctly in $sig");
+  is($bPer, $spelledB, "Beats per set correctly in $sig");
+  is($clock->measureTime(), $TICKS_PER_BEAT * $bPer, "Correct ticks per measure in $sig");
+  is(sprintf("%.2f",$clock->ticks2seconds($mTicks)), 
+     sprintf("%.2f",(60 * $clock->beatsPerMeasure() * $measures) / $tempo),
+     "Correct time given for $measures measures ($mTicks) in $sig");
+  $testCt += 5;
+}
+done_testing($testCt);
+exit(0);

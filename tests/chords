@@ -1,0 +1,71 @@
+#!/usr/bin/perl
+use Test::More tests => 37;
+use_ok AutoHarp::Event::Chord;
+use_ok AutoHarp::Event::Note;
+use AutoHarp::Fuzzy;
+my $p = 60 + int(rand(8));
+my @n = (AutoHarp::Event::Note->new($p),      #0 root
+	 AutoHarp::Event::Note->new($p + 2),  #1 2nd
+	 AutoHarp::Event::Note->new($p + 3),  #2 minor third
+	 AutoHarp::Event::Note->new($p + 4),  #3 major third
+	 AutoHarp::Event::Note->new($p + 5),  #4 fourth
+	 AutoHarp::Event::Note->new($p + 6),  #5 dim fifth
+	 AutoHarp::Event::Note->new($p + 7),  #6 fifth
+	 AutoHarp::Event::Note->new($p + 10), #7 minor 7th
+	 AutoHarp::Event::Note->new($p + 11), #8 dominant 7th
+	 AutoHarp::Event::Note->new($p + 15), #9 maj sharp ninth
+	 AutoHarp::Event::Note->new($p + 16)  #10 min flat 11
+	);
+my @c = (AutoHarp::Event::Chord->new($n[0],$n[2],$n[6]),
+	 AutoHarp::Event::Chord->new($n[0],$n[3],$n[6]),
+	 AutoHarp::Event::Chord->new($n[5],$n[0],$n[2]),
+	 AutoHarp::Event::Chord->new($n[0],$n[2],$n[6],$n[8]),
+	 AutoHarp::Event::Chord->new($n[0],$n[3],$n[6],$n[7]),
+	 AutoHarp::Event::Chord->new($n[2],$n[6],$n[9],$n[0]),
+	 AutoHarp::Event::Chord->new($n[3],$n[6],$n[9],$n[0]),
+	 AutoHarp::Event::Chord->new($n[0],$n[2],$n[5],$n[8]),
+	);
+my $root    = $n[0]->letter;
+my $sub     = AutoHarp::Event::Note->new($p - 1);
+my $sRoot   = $sub->letter;
+is(lc($c[0]->toString),lc($root . 'm'),'minor chord');
+is($c[1]->toString,uc($root),'major chord');
+is(lc($c[2]->toString),lc($root . "dim"),'diminished chord');
+is(lc($c[3]->toString),lc($root . "mmajor7"),'minor major 7th chord');
+is(lc($c[4]->toString),lc($root . "7"),'major dominant 7th chord');
+is(lc($c[5]->toString),lc($root . "m"),'minor with octave minor 3rd');
+is(lc($c[6]->toString),lc($root . "sharp9"),'major with octave minor 3rd');
+is(lc($c[7]->toString),lc($sRoot . " over " . $root),"half step down chord over the root note");
+
+my $oct = int(rand(9));
+$c[1]->octave($oct);
+is($c[1]->root->octave,$oct,"Octave change");
+
+my $randomPitch = 48 + (pickOne(1,-1) * int(rand(12)));
+my $letter = AutoHarp::Event::Note->new($randomPitch)->letter;
+my @strs = ($letter, 
+	    $letter . "min",
+	    $letter . " major7",
+	    $letter . " sus4 dominant7",
+	    $letter . " major flat 2nd 7");
+my @chords = map {AutoHarp::Event::Chord->fromString($_)} @strs;
+my $basePitch = ($randomPitch % 12) + 48;
+ok($chords[0]->hasPitch($basePitch + 4),sprintf("%s has major third (%d)",$chords[0]->toString,$basePitch + 4));
+ok($chords[1]->hasPitch($basePitch + 3),sprintf("%s has minor third (%d)",$chords[1]->toString,$basePitch + 3));
+ok($chords[2]->hasPitch($basePitch + 4),sprintf("%s has major third (%d)",$chords[2]->toString,$basePitch + 4));
+ok($chords[2]->hasPitch($basePitch + 11),sprintf("%s has major seventh (%d)",$chords[2]->toString,$basePitch + 11));
+ok($chords[3]->hasPitch($basePitch + 5),sprintf("%s has fourth (%d)",$chords[3]->toString,$basePitch + 5));
+ok($chords[3]->hasPitch($basePitch + 10),sprintf("%s has dominant seventh (%d)",$chords[3]->toString,$basePitch + 10));
+ok($chords[4]->hasPitch($basePitch + 1),sprintf("%s has flat two (%d)",$chords[4]->toString,$basePitch + 1));
+ok($chords[4]->hasPitch($basePitch + 10),sprintf("%s has dominant seventh (%d)",$chords[4]->toString,$basePitch + 10));
+
+foreach my $c (@chords) {
+  is($c->root()->letter,$letter,sprintf("%s has the correct root letter (%s)",$c->toString,$letter));
+}
+foreach my $c (@c, @chords) {
+  my $newChord = AutoHarp::Event::Chord->fromString($c->toString());
+  is($newChord->toString(), $c->toString(), sprintf("Chord constructed from %s is still a %s",$c->toString(),$newChord->toString()));
+}
+
+exit(0);
+

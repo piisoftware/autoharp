@@ -1,0 +1,78 @@
+#!/usr/bin/env perl
+use Test::More;
+use AutoHarp::Constants;
+use AutoHarp::Fuzzy;
+use_ok AutoHarp::Instrument;
+use_ok AutoHarp::MusicBox::Song::Segment;
+use_ok AutoHarp::Events::Guide;
+use_ok AutoHarp::Clock;
+use_ok AutoHarp::Generator;
+use MIDI;
+
+my $testCount = 5;
+my $bass = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $BASS_INSTRUMENT);
+my $loop = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $DRUM_LOOP);
+
+for (1..4) {
+  $loop->reset();
+  $bass->reset();
+  my $measures  = int(rand(8)) + 1;
+  my $genreName = pickOne(AutoHarp::Genre::Genres());
+  my $genre     = AutoHarp::Genre->new($genreName);
+  my $clock = $genre->suggestClock();
+  my $guide = AutoHarp::Events::Guide->fromAttributes(
+						      $ATTR_CLOCK => $clock,
+						      $ATTR_BARS => $measures
+						     );
+  my $music   = AutoHarp::Generator->new()->generateMusic($guide);
+  $music->tag($SONG_ELEMENT_VERSE);
+  my $segment = AutoHarp::MusicBox::Song::Segment->new();
+  $music->genre($genre);
+  $segment->music($music);
+  is($segment->duration(), $measures * $clock->measureTime(), "Segment is valid in its, like, length");
+  $testCount++;
+  if (ok($segment->genre(),"Segment genre is not null")) {
+    is($segment->genre()->name, $genreName, "Segment has the correct genre, $genreName");
+    $testCount++;
+  }
+  $testCount++;
+
+  my $freeStylin = asOftenAsNot;
+  my $drumPlay = $loop->play($segment);
+  my $notes    = $bass->play($segment,($freeStylin) ? undef : $drumPlay);
+
+  my $timeok = 1;
+  foreach my $play ($drumPlay,$notes) {
+    $timeok &= cmp_ok($play->time(), ">=", $segment->time(), "Bass doesn't come in too early");
+    $timeok &= cmp_ok($play->reach(), "<=", $segment->reach() + $NOTE_MINIMUM_TICKS, "Bass doesn't exit too late");
+    $timeok &= cmp_ok($play->duration(), ">", $segment->duration() - $clock->measureTime(), "Bass actually, like, exists, or whatever");
+    $testCount += 3;
+  }
+  
+  if (!$timeok) {
+    $notes->dump();
+    print JSON->new()->pretty->encode($loop->patterns());
+    print "Freestyle: $freeStylin\n";
+
+    last;
+  }
+
+  my $wentOk = 1;
+  my $lastWhen;
+  if (!$freeStylin) {
+    foreach my $n (@{$notes->notes()}) {
+      $wentOk &= cmp_ok($n->pitch, ">=", $MIDI::note2number{C3}, sprintf("%s is a valid bass note",$n->noteAndOctave()));
+      $testCount++;
+      $wentOk &= ok(scalar @{$drumPlay->hitsAt($n->time)}, sprintf("There's a drum hit at time %d",$n->time));
+      $testCount++;
+    }
+  }
+  if (!$wentOk) {
+    $notes->dump();
+    print JSON->new()->pretty->encode($loop->patterns());
+    print "Freestyle: $freeStylin\n";
+    last;
+  }
+}
+done_testing($testCount);
+exit(0);

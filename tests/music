@@ -1,0 +1,73 @@
+#!/usr/bin/env perl
+use Test::More tests => 24; 
+use_ok AutoHarp::MusicBox::Base;
+use_ok AutoHarp::Generator;
+use_ok AutoHarp::Clock;
+
+my $generator = AutoHarp::Generator->new();
+my $clock  = AutoHarp::Clock->new();
+my $music = AutoHarp::MusicBox::Base->new();
+my $measures = 4 + (int(rand(4)) * 4);
+my $randomTime = $clock->measureTime + int(rand($clock->measureTime()));
+
+$music->measures($measures);
+my $melody = $generator->generateMelody($music);
+ok($melody->duration > $clock->measureTime * 3, "Melody has, like, a duration");
+$melody->time($randomTime);
+is($music->time, 0, "First music's time is still 0 after I fuck with it's melody");
+is($music->melody->time, $randomTime, "First music's melody is fucked now that I messed with its time");
+my $fromMelody = AutoHarp::MusicBox::Base->new();
+$fromMelody->setMeasures($measures);
+$fromMelody->melody($music->melody);
+$fromMelody->time($randomTime);
+my $mDur = $melody->duration();
+my $nearestBegin = $clock->nearestMeasure($randomTime);
+$clock->time($nearestBegin);
+is($fromMelody->time, $nearestBegin, "Music correctly rounds $randomTime to $nearestBegin");
+is($fromMelody->melody->time, $nearestBegin, "Music correctly rounds the start of the melody that created it to $nearestBegin");
+$music->melody->time(0);
+is($melody->time, 0, "Unfucking the music's melody unfucks the time of the reference to that melody");
+is($fromMelody->time, $nearestBegin, "...but it doesn't alter the music that was created from it");
+$generator->harmonize($fromMelody);
+ok($fromMelody->hasProgression(), "Harmonizing the from melody gives it a progression");
+
+my $fromClone = $fromMelody->clone();
+is($fromMelody->time,$fromClone->time,"Clone and original have matching times");
+is($fromMelody->duration,$fromClone->duration,"Clone and original have matching durations");
+is($fromMelody->progression->id(), $fromClone->progression->id(), "Clone and original have matching progressions");
+is($fromMelody->melody->id(), $fromClone->melody->id(), "Clone and original have matching melodies");
+
+my $hook = $generator->generateHook($fromMelody);
+ok($hook->duration() > 0, "Hook, like, exists");
+my $otherClone = $fromMelody->clone();
+is($fromMelody->progression->id(), $otherClone->progression->id(), "2nd clone and original have matching progressions");
+is($fromMelody->melody->id(), $otherClone->melody->id(), "2nd clone and original have matching melodies");
+
+$otherClone->halve();
+my $is = is($otherClone->duration(), $fromMelody->duration() / 2, sprintf("After halving, the other clone is %d",$fromMelody->duration() / 2));
+
+if (!$is) {
+  $fromMelody->dump();
+  print "\n\n";
+  $otherClone->dump();
+  die "ARG";
+}
+
+is($otherClone->progression()->duration(), $fromMelody->duration() / 2, "As is the progression");
+is($otherClone->guide()->duration(), $fromMelody->duration() / 2, "As is the guide");
+$otherClone->halve();
+my $isAgain = is($otherClone->duration(), $fromMelody->duration() / 4, sprintf("After halving again, the other clone is %d",$fromMelody->duration() / 4));
+if (!$isAgain) {
+  $fromMelody->dump();
+  print "\n\n";
+  $otherClone->dump();
+  die "ARG TWICE";
+}
+
+is($otherClone->progression()->duration(), $fromMelody->duration() / 4, "As is the progression");
+is($otherClone->guide()->duration(), $fromMelody->duration() / 4, "As is the guide");
+
+exit(0);
+
+
+

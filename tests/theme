@@ -1,0 +1,78 @@
+#!/usr/bin/env perl
+use Test::More;
+use AutoHarp::Constants;
+use AutoHarp::Fuzzy;
+use_ok AutoHarp::Instrument;
+use_ok AutoHarp::MusicBox::Song::Segment;
+use_ok AutoHarp::Events::Guide;
+use_ok AutoHarp::Generator;
+use_ok AutoHarp::Genre;
+use MIDI;
+use strict;
+
+my $testCount = 5;
+
+my $lead  = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $LEAD_INSTRUMENT);
+my $accidentalPct = {};
+
+for (1..4) {
+  my $theme = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $THEME_INSTRUMENT);
+  $lead->reset();
+  my $measures = int(rand(4)) + 4;
+  my $genreName = pickOne(AutoHarp::Genre::Genres());
+  my $genre     = AutoHarp::Genre->new($genreName);
+  my $clock = $genre->suggestClock();
+  my $guide = AutoHarp::Events::Guide->fromAttributes(
+						      $ATTR_CLOCK => $clock,
+						      $ATTR_BARS => $measures
+						     );
+  my $time = int(rand(8)) * $clock->measureTime();
+  ok(1,"Start generating music");
+  my $music   = AutoHarp::Generator->new()->generateMusic($guide);
+  ok(1,"End generating music");
+  $testCount += 2;
+  $music->tag($SONG_ELEMENT_VERSE);
+  my $segment = AutoHarp::MusicBox::Song::Segment->new();
+  $music->genre($genre);
+  $segment->music($music);
+  $segment->time($time);
+  ok($theme->{themeIdentity},"Theme has identity $theme->{themeIdentity}");
+  is($segment->duration(), $measures * $clock->measureTime(), "Segment is valid in its, like, length");
+  $testCount += 2;
+  if (ok($segment->genre(),"Segment genre is not null")) {
+    is($segment->genre()->name, $genreName, "Segment has the correct genre, $genreName");
+    $testCount++;
+  }
+  $testCount++;
+  my $follow    = ($theme->is('harmonizer')) || sometimes;
+  my $leadPlay  = $lead->play($segment);
+  my $themePlay = $theme->play($segment,($follow) ? $leadPlay : undef);
+
+  foreach my $d ({thing => 'Lead', play => $leadPlay},
+		 {thing => 'Theme', play => $themePlay}) {
+    my $play = $d->{play};
+    my $thing = $d->{thing};
+
+    cmp_ok($play->time(), ">=", $segment->time(), "$thing doesn't come in too early");
+    cmp_ok($play->reach(), "<=", $segment->reach() + $clock->measureTime, "$thing doesn't exit too late");
+    cmp_ok($play->duration(), ">", $clock->measureTime(), "$thing actually, like, exists, or whatever");
+    if ($thing eq 'Theme' && !$theme->is('melody')) {
+      foreach my $n (@{$play->notes()}) {
+	my $scale = $guide->scaleAt($n->time);
+	if ($scale->isAccidental($n->pitch)) {
+	  $accidentalPct->{accidentals}++;
+	}
+	$accidentalPct->{notes}++;
+      }
+    }
+    $testCount += 3;
+  }
+}
+if ($accidentalPct->{notes} > 75) {
+  my $pct = $accidentalPct->{accidentals} / $accidentalPct->{notes};
+  ok($pct < .1, sprintf("%.2f% (%d out of %d) is less than ten percent accidentals",$pct,$accidentalPct->{accidentals},$accidentalPct->{notes}));
+  $testCount++;
+}
+
+done_testing($testCount);
+exit(0);

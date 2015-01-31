@@ -1,0 +1,70 @@
+#!/usr/bin/env perl
+use Test::More;
+use AutoHarp::Constants;
+use_ok AutoHarp::Notation;
+use_ok AutoHarp::Events::Guide;
+use_ok AutoHarp::Generator;
+use MIDI;
+use strict;
+
+my $testCount = 3;
+my $gen   = AutoHarp::Generator->new();
+
+my @clocks = (AutoHarp::Clock->new($ATTR_METER => '4/4'),
+	      AutoHarp::Clock->new($ATTR_METER => '6/8'),
+	      AutoHarp::Clock->new($ATTR_METER => '7/8'),
+	     );
+
+foreach my $clock (@clocks) {
+  my $guide = AutoHarp::Events::Guide->new();  
+  my $measures = 4 + int(rand(4));
+  $guide->measures($measures);
+  my $music = $gen->generateMusic($guide);
+  ok($music->hasMelody(),"Music has a melody");
+  ok($music->hasProgression(),"Music has progression");
+  $testCount += 2;
+  my $newMusic = AutoHarp::MusicBox::Base->fromDataStructure($music->toDataStructure());
+  ok($newMusic->hasMelody(),"New Music has a melody");
+  ok($newMusic->hasProgression(),"New Music has progression");
+  $testCount += 2;
+  my $old = $music->melody()->notes;
+  my $new = $newMusic->melody()->notes;
+  ok(scalar @$old > 0, "melody has notes");
+  my $okay = is(scalar @$old,scalar@$new, "Same number of notes");
+  $testCount += 2;
+  if ($okay) {
+    for (my $j = 0; $j < scalar @$old; $j++) {
+      $okay &= is($old->[$j]->pitch,$new->[$j]->pitch,sprintf("Note %d is a %s",$j + 1,$old->[$j]->toString()));
+      $okay &= is($old->[$j]->time,$new->[$j]->time,sprintf("Note %d occurs at %d",$j + 1,$old->[$j]->time()));
+      $okay &= is($old->[$j]->duration,$new->[$j]->duration,sprintf("Note %d is %d long",$j + 1,$old->[$j]->duration()));
+      $testCount += 3;
+      last unless $okay;
+    }
+  }
+  if (!$okay) {
+    $music->melody()->dump();
+    print $music->melody()->toString($music->guide()) . "\n";
+    exit(done_testing($testCount));
+  }
+  my $oldP = $music->progression->chords();
+  my $newP = $newMusic->progression->chords();
+  ok(scalar @$oldP > 0, "progression has chords");
+  my $okay = is(scalar @$oldP,scalar@$newP, "Same number of chords");
+  $testCount += 2;
+  if ($okay) {
+    for (my $j = 0; $j < scalar @$oldP; $j++) {
+      $okay &= is($oldP->[$j]->toString(),$newP->[$j]->toString(),sprintf("Chord %d is a %s",$j + 1,$oldP->[$j]->toString()));
+      $okay &= is($oldP->[$j]->time,$newP->[$j]->time,sprintf("Chord %d is occurs at %d",$j + 1,$oldP->[$j]->time()));
+      $okay &= is($oldP->[$j]->duration,$newP->[$j]->duration,sprintf("Chord %d is %d long",$j + 1,$oldP->[$j]->duration()));
+      $testCount += 3;
+    }
+  }
+  if (!$okay) {
+    foreach my $p (@$oldP) {
+      $p->dump();
+    }
+    $music->dump();
+  }
+}
+done_testing($testCount);
+exit(0);

@@ -1,0 +1,59 @@
+#!/usr/bin/env perl
+use Test::More;
+use_ok AutoHarp::Constants;
+use_ok AutoHarp::Instrument;
+use_ok AutoHarp::MusicBox::Song::Segment;
+use_ok AutoHarp::MusicBox::Base;
+use_ok AutoHarp::Clock;
+use MIDI;
+
+my $testCount = 5;
+#ending early because DrumKit sucks my balls
+exit(!done_testing($testCount));
+
+my $kit = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $DRUM_KIT);
+my @clocks = (AutoHarp::Clock->new($ATTR_METER => '4/4'),
+	      AutoHarp::Clock->new($ATTR_METER => '5/4'),
+	      AutoHarp::Clock->new($ATTR_METER => '6/8'),
+	      AutoHarp::Clock->new($ATTR_METER => '7/8'),
+	      AutoHarp::Clock->new($ATTR_METER => '11/4'));
+foreach my $clock (@clocks) {
+  my $music = AutoHarp::MusicBox::Base->new();
+  my $measures = 4 + int(rand(4));
+  $music->setClock($clock);
+  $music->measures($measures);
+  my $segment = AutoHarp::MusicBox::Song::Segment->new();
+  $segment->music($music);
+  ok($clock->meter,"Clock meter is " . $clock->meter());
+  is($segment->duration(), $measures * $clock->measureTime(), "Segment is valid in its, like, length");
+  my $notes = $kit->play($segment);
+  cmp_ok($notes->duration(), ">=", ($clock->measureTime * $measures) - $clock->beatTime(), "Drums are at least as long as $measures measures less one beat");
+  $testCount += 3;
+
+  my $seen = {};
+  my $kickCount = 0;
+  my $dump = 1;
+  my $kickTime  = -99999;
+  my $kickSpace = $clock->beatTime() / 2;
+  foreach my $n (@{$notes->notes()}) {
+    my $drumName = $MIDI::notenum2percussion{$n->pitch};
+    ok($drumName, "Pitch is a $drumName");
+    $dump &= ok(!$seen->{$n->time}{$n->pitch}++,sprintf("We have not seen a(n) %s at time %d, sig %s",$drumName,$n->time,$clock->meter()));
+    $testCount += 2;
+    if ($n->isKickDrum()) {
+      $kickCount++ if ($n->time < $segment->music->reach());
+      $dump &= cmp_ok($n->time - $kickTime, ">=", $kickSpace, "Allow at least $kickSpace between kick drum hits in " . $clock->meter());
+      $kickTime = $n->time();
+      $testCount++;
+    }
+  }
+  $dump &= cmp_ok($kickCount, '>=', 2 * ($measures - 1), "At least two kicks in all but the last measure of " . $clock->meter);
+  $testCount++;
+  if (!$dump) {
+    $notes->dumpDrums();
+    last;
+  }
+}
+
+done_testing($testCount);
+exit(0);

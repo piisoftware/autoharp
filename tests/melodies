@@ -1,0 +1,115 @@
+#!/usr/bin/env perl
+use Test::More tests => 47; 
+use_ok AutoHarp::Constants;
+use_ok AutoHarp::MusicBox::Base;
+use_ok AutoHarp::Events::Melody;
+use_ok AutoHarp::Generator;
+use_ok AutoHarp::Events::Guide;
+use_ok AutoHarp::Arcana::Environment::Play;
+
+my $debug = $ENV{DEBUG};
+my $measuresOfFive = int(rand(3)) + 2;
+my $measuresOfThree = int(rand(4)) + 2;
+my $changeScaleAfterMeasure = $measuresOfFive - 1;
+my $generator = AutoHarp::Generator->new();
+my $dGuide  = AutoHarp::Events::Guide->new();
+my $dScale = AutoHarp::Scale->new($ATTR_KEY => 'D');
+my $dClock  = AutoHarp::Clock->new($ATTR_TEMPO => 110, $ATTR_METER => '5/4');
+my $gScale = AutoHarp::Scale->new($ATTR_KEY => 'G');
+my $gClock  = AutoHarp::Clock->new($ATTR_TEMPO => 125, $ATTR_METER => '3/4');
+
+is($dClock->meter(),'5/4','Meter set correctly');
+is($dClock->tempo(),110,'Tempo set correctly');
+is($dScale->key,'D','Scale set correctly');
+is($gClock->meter(),'3/4','Second meter set correctly');
+is($gClock->tempo(),125,'Second tempo set correctly');
+is($gScale->key,'G','Second scale set correctly');
+
+$dGuide->setScale($dScale);
+$dGuide->setClock($dClock);
+
+my $scaleChangeTime = $dClock->measureTime * $changeScaleAfterMeasure;
+my $clockChangeTime = $dClock->measureTime * $measuresOfFive;
+ok($dGuide->clock->equals($dClock),'Clocks match at time zero');
+ok($dGuide->scale->equals($dScale), 'Scales match at time zero');
+is($dGuide->clock->beatsPerMeasure, '5', 'Beats per measure at time zero is 5');
+$dGuide->setScale($gScale, $scaleChangeTime);
+is($dGuide->duration, $changeScaleAfterMeasure * $dClock->beatsPerMeasure() * $TICKS_PER_BEAT, "Guide duration after setting another scale");
+ok((scalar grep {$_->isScale() && $_->time == $scaleChangeTime} @$dGuide) == 1, "Guide should have 1 scale event at time $scaleChangeTime");
+
+my $messup = int(rand($TICKS_PER_BEAT)) + 1;
+$dGuide->setClock($gClock,  $clockChangeTime - $messup);
+is($dGuide->duration, $measuresOfFive * 5 * $TICKS_PER_BEAT, "Guide duration after setting clock");
+$isGuide &= ok((scalar grep {$_->isClock() && $_->time == $clockChangeTime} @$dGuide) == 2, "Guide should have 2 clock events at time $clockChangeTime");
+my $totalMeasures = $measuresOfFive + $measuresOfThree;
+$dGuide->setMeasures($totalMeasures);
+my $expDuration = ($measuresOfFive * 5 * $TICKS_PER_BEAT) + ($measuresOfThree * 3 * $TICKS_PER_BEAT);
+my $isGuide = 1;
+
+$isGuide &= is($dGuide->measures(), $totalMeasures, "$totalMeasures measures");
+$isGuide &= is($dGuide->duration(), $expDuration,"guide duration");
+
+my $scales = $dGuide->scales();
+$isGuide &= ok($scales->[0][0] == 0 && $scales->[0][1]->key eq 'D', "Guide should have D scale event at time 0");
+$isGuide &= ok($scales->[1][0] == $scaleChangeTime && $scales->[1][1]->key eq 'G', "Guide should have G scale event at time $scaleChangeTime");
+
+$isGuide &= ok((scalar grep {$_->isClock() && $_->time == 0} @$dGuide) == 2, "Guide should have 2 clock events at time 0");
+$isGuide &= ok((scalar grep {$_->isClock() && $_->time == $clockChangeTime} @$dGuide) == 2, "Guide should have 2 clock events at time $clockChangeTime");
+
+$isGuide &= ok($dGuide->scaleAt($scaleChangeTime - (int(rand($TICKS_PER_BEAT)) + 1))->equals($dScale),"Scale is the first scale before $scaleChangeTime");
+$isGuide &= ok($dGuide->clockAt($clockChangeTime - (int(rand($TICKS_PER_BEAT)) + 1))->equals($dClock),"Clock is the first clock before $clockChangeTime");
+$isGuide &= ok($dGuide->scaleAt($scaleChangeTime + int(rand($TICKS_PER_BEAT)) + 1)->equals($gScale),"Scale is the second scale after $scaleChangeTime");
+$isGuide &= ok($dGuide->clockAt($clockChangeTime + int(rand($TICKS_PER_BEAT)) + 1)->equals($gClock),"Clock is the second clock after $clockChangeTime");
+
+
+if (!$isGuide) {
+  print "GUIDE FAILED\n";
+  $dGuide->dump();
+}
+
+my $isMelody = 1;
+my $music = AutoHarp::MusicBox::Base->new();
+$music->guide($dGuide);
+my $melody = $generator->generateMelody($music);
+$isMelody &= ok((scalar grep {$_->isClock() || $_->isScale()} @$melody) == 0, "Melody should not have clock or scale events");
+
+$isMelody &= cmp_ok($melody->duration, '<=', $dGuide->duration + $dClock->measureTime, 'Melody not too much longer than guide');
+my $sub = $melody->subMelody($dClock->measureTime, $dClock->measureTime * 2);
+$isMelody &= cmp_ok($sub->duration, '<=', $dClock->measureTime, 'Sub melody not longer than single measure');
+$isMelody &= cmp_ok($sub->duration, '>', 0, 'Sub melody longer than, like, nothing');
+my $oldId = $melody->id();
+ok($oldId ne 'MELODY_0', "Melody id ($oldId) should be something non-trivial");
+$isMelody &= ok(!$dScale->isAccidental($melody->startNote()),"First note of the melody should never be an accidental");
+
+if (!$isMelody) {
+  print "MELODY:\n";
+  $melody->dump;
+  print "SUBMELODY\n";
+  $sub->dump;
+}
+
+my $zero = AutoHarp::Event->zeroEvent();
+is((scalar grep {$_->isZeroEvent} @$sub),1,'one zero event');
+is($sub->find($zero)->time(), $dClock->measureTime, "Event zero in the correct place");
+my $randomTime = int(rand($dClock->measureTime));
+$sub->time($randomTime);
+
+is($sub->time(), $randomTime,"Set time to $randomTime in the sub melody");
+is($sub->find($zero)->time(), $randomTime,"Zero event reflects new time");
+is((scalar grep {$_->isZeroEvent()} @$sub),1,'still one zero event in submelody');
+is($melody->time(), 0, "Melody time is still 0");
+is($melody->find($zero)->time(), 0, "Melody's zero event is still 0");
+is((scalar grep {$_->equals($zero)} @$melody),1,'still one zero event in melody');
+is($oldId,$melody->id(),'melody unaltered');
+
+my $is = 1;
+my $prog = $generator->harmonize($music);
+is($music->duration(), $expDuration,"music duration");
+
+$is &= is($oldId, $melody->id(), 'melody unaltered after harmonization');
+$is &= is($prog->duration(), $dGuide->duration, "Progression fills the whole time");
+
+exit(0);
+
+
+

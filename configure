@@ -1,0 +1,111 @@
+#!/usr/bin/env perl
+
+use strict;
+
+my $isWindows = ($^O =~ /MSWin/i);
+my $DS = ($isWindows) ? chr(92) : "/";
+my $moduleDir = "lib${DS}AutoHarp";
+my $cpanCmd = ($isWindows) ? "cpan" : "sudo cpan";
+
+if (!-d $moduleDir) {
+  die "Dude. You must be in the directory where you unzipped this file. Otherwise badness will occur";
+}
+
+my @MODLIST = qw(FindBin
+		 File::Copy
+		 File::Which
+		 TAP::Harness
+		 Test::More
+		 Carp
+		 MIDI
+		 Data::Dumper
+		 JSON
+		 NEXT
+		 Scalar::Util
+		 Class::Load
+		 Readonly);
+
+my $HOME = $ENV{HOME} || $ENV{HOMEPATH};
+
+print "AUTOHARP CONFIGURATION==>\n";
+print "Installing other needed modules from the interwebs...\n";
+my @needed;
+foreach my $mod (@MODLIST) {
+  eval "require $mod";
+  if ($@) {
+    push(@needed,$mod);
+  }
+}
+
+if (scalar @needed) {
+  if (system("$cpanCmd -f -i @needed")) {
+    print join("\n",@needed);
+    print "\n";
+    die "OH NOES! Install of needed modules failed! You probably need to update the version of perl running on your system. Try that and then run this again.";
+  }
+} else {
+  print "Nothing to install\n";
+}
+
+my $dataDir;
+my $default = "$HOME${DS}autoharp";
+while (!-d $dataDir) {
+  print "Where should I write midi and json files\n(enter for $default)==> ";
+  chomp($dataDir = <STDIN>);
+  $dataDir ||= $default;
+  if (!-d $dataDir && !mkdir($dataDir)) {
+    print "Dude. Couldn't create that directory: $!";
+  }
+}
+my $mDir = "$dataDir${DS}midi";
+my $dDir = "$dataDir${DS}json";
+if (!-d $mDir) {
+  mkdir($mDir);
+}
+if (!-d $dDir) {
+  mkdir($dDir);
+}
+
+my $player;
+print "Have you a command-line midi player like qtplay or timidity installed?\n";
+print "Enter it here, or just enter if none==> ";
+while (!$player) {
+  chomp(my $exe = <STDIN>);
+  last if (!$exe);
+  if (-x $exe) {
+    $player = $exe;
+  } else {
+    $player = File::Which::which($exe);
+    if (!$player) {
+      print "Couldn't find $exe anywhere...maybe enter the full path to it?";
+    }
+  }
+}
+
+open(INIFILE,">.autoharp-config") or die "OH NOES! Couldn't write configuration file: $!";
+print INIFILE "MIDI: $dataDir${DS}midi\n";
+print INIFILE "JSON: $dataDir${DS}json\n";
+print INIFILE "PLAYER: $player\n";
+close INIFILE;
+print "Install was successful (yay!)\n";
+exit(0);
+
+sub recCp {
+  my $fromDir = shift;
+  my $toDir   = shift;
+  if (-d $fromDir && !-d $toDir) {
+    mkdir($toDir);
+  }
+  opendir(THAMODULES,$fromDir) or die "Couldn't find AutoHarp modules in $fromDir. Are you running this script from the directory into which you unzipped it?";
+  foreach my $thing (grep {/\w/} readdir(THAMODULES)) {
+    my $f = "$fromDir${DS}$thing";
+    my $t = "$toDir${DS}$thing";
+    if (-d $f) {
+      recCp($f,$t);
+    } elsif ($f !~ /\~$/ && -f $f) {
+      if (!File::Copy::syscopy($f,$t)) {
+	die "OH NOES. I HAD COME SO FAR. WHY DID I FAIL INSTALLING $f to $t???\nIt was because: $!";
+      }
+    }
+  }
+}

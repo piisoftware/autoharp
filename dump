@@ -1,0 +1,4 @@
+#!/usr/bin/env perl
+use MIDI;
+
+MIDI::Opus->new({'from_file' => $ARGV[0]})->dump({dump_tracks => 1});

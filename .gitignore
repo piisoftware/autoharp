@@ -1,0 +1,9 @@
+*~
+\#*
+\.\#*
+midi/*
+json/*
+.autoharp-config*
+/db
+.DS_Store
+README.rtf

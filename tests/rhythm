@@ -1,0 +1,95 @@
+#!/usr/bin/env perl
+use Test::More;
+use AutoHarp::Constants;
+use AutoHarp::Fuzzy;
+use_ok AutoHarp::Instrument;
+use_ok AutoHarp::MusicBox::Song::Segment;
+use_ok AutoHarp::Events::Guide;
+use_ok AutoHarp::Generator;
+use MIDI;
+
+my $testCount = 4;
+my $rhythm    = AutoHarp::Instrument->new
+  (
+   $ATTR_INSTRUMENT_CLASS => $RHYTHM_INSTRUMENT
+  );
+my $loop   = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $DRUM_LOOP);
+
+for (1..4) {
+  $loop->reset();
+  $rhythm->reset();
+  $loop->isPlaying(1);
+  $rhythm->isPlaying(1);
+  my $measures = int(rand(4)) + 4;
+  my $genreName = pickOne(AutoHarp::Genre::Genres());
+  my $genre     = AutoHarp::Genre->new($genreName);
+  my $clock = $genre->suggestClock();
+  my $guide = AutoHarp::Events::Guide->fromAttributes(
+						      $ATTR_CLOCK => $clock,
+						      $ATTR_BARS => $measures
+						     );
+  my $music   = AutoHarp::Generator->new()->generateMusic($guide);
+  $music->tag($SONG_ELEMENT_VERSE);
+  my $segment = AutoHarp::MusicBox::Song::Segment->new();
+  $music->genre($genre);
+  $segment->music($music);
+  is($segment->duration(), $measures * $clock->measureTime(), "Segment is valid in its, like, length");
+  $testCount++;
+  if (ok($segment->genre(),"Segment genre is not null")) {
+    is($segment->genre()->name, $genreName, "Segment has the correct genre, $genreName");
+    $testCount++;
+  }
+  $testCount++;
+
+  my $drumPlay = $loop->play($segment);
+  my $notes    = $rhythm->play($segment,$drumPlay);
+
+  my $timeok = 1;
+  foreach my $play ($drumPlay,$notes) {
+    $timeok &= cmp_ok($play->time(), ">=", $segment->time(), "Rhythm doesn't come in too early");
+    $timeok &= cmp_ok($play->reach(), "<=", $segment->reach() + $NOTE_MINIMUM_TICKS, "Rhythm doesn't exit too late");
+    $timeok &= cmp_ok($play->duration(), ">=", $segment->duration() - $clock->measureTime(), "Rhythm actually, like, exists, or whatever");
+    $testCount += 3;
+  }
+  
+  if (!$timeok) {
+    $notes->dump();
+    print JSON->new()->pretty->encode($loop->patterns());
+    last;
+  }
+
+  my $dump = 1;
+  my $playVars = $rhythm->playVariables();
+  ok(scalar keys %$playVars, "Rhythm guide has keys");
+  $testCount++;
+  
+  my $everythingIsBunk = $playVars->{wentCrazy};
+  my $expectedNotes = ($everythingIsBunk) ? 1 :
+    ($playVars->{chordType} eq $EVENT_CHORD) ? 3 :
+      ($playVars->{chordType} eq $EVENT_NOTE) ? 1 : 2;
+  my $offBeat       = $playVars->{offBeat};
+
+  my $wentOk = 1;
+  my $lastWhen;
+  foreach my $n (@{$notes->notes()}) {
+    my @played = grep {$_->time == $n->time} @{$notes->notes()};
+    $wentOk &= cmp_ok(scalar @played, 
+		      ">=", 
+		      $expectedNotes, 
+		      sprintf("At least %d notes played at time %d",$expectedNotes, $n->time));
+    if ($offBeat) {
+      $wentOk &= is($n->time % $clock->beatTime(), $clock->beatTime() / 2, "Offbeat rhythm is, like, off the beat");
+    } else {
+      $wentOk &= ok(scalar @{$drumPlay->hitsAt($n->time)}, "There are drum hits at the time of this note");
+    }
+    $testCount += 2;
+  }
+  if (!$wentOk) {
+    $notes->dump();
+    print JSON->new()->pretty->encode($playVars);
+    $drumPlay->dump();
+    last;
+  }
+}
+done_testing($testCount);
+exit(0);

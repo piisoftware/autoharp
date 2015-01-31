@@ -1,0 +1,51 @@
+#!/usr/bin/env perl
+use Test::More;
+use AutoHarp::Constants;
+use AutoHarp::Fuzzy;
+use_ok AutoHarp::MusicBox::Base;
+use_ok AutoHarp::Generator;
+use_ok AutoHarp::Clock;
+use_ok AutoHarp::Scale;
+use_ok AutoHarp::MusicBox::Hook;
+
+my $testCt = 5;
+my $generator = AutoHarp::Generator->new();
+my $clock  = AutoHarp::Clock->new();
+my $music = AutoHarp::MusicBox::Base->new();
+my $measures = pickOne(4,8);
+
+$music->measures($measures);
+my $melody = $generator->generateMelody($music);
+my $prog   = $generator->harmonize($music);
+ok($prog->duration == $music->duration, "Progression as long as music");
+$testCt++;
+my $hook      = $generator->generateHook($music);
+
+ok($hook->duration <= $music->duration, "Hook is no longer than music");
+$testCt++;
+ok($hook->theHook()->duration > 0, "Hook is actually, like, there");
+$testCt++;
+ok(!$hook->hasProgression(), "Hook has no progression");
+$testCt++;
+
+foreach my $key ('C Major','E Minor','B Flat Major') {
+  my $otherScale = AutoHarp::Scale->new($key);
+  my $otherMusic = AutoHarp::MusicBox::Base->new({$ATTR_SCALE => $otherScale});
+  $otherMusic->measures($measures * 2);
+  $generator->generateMelody($otherMusic);
+  ok($otherMusic->duration() == 2 * $music->duration(),sprintf("%d is twice as long as %d",$otherMusic->duration(),$music->duration()));
+  $testCt++;
+  ok($hook->theHook()->duration() < $otherMusic->duration(), sprintf("%d is longer than %d",$otherMusic->duration(),$hook->theHook()->duration()));
+  $testCt++;
+  my $adaptedHook = $hook->adaptOnto($otherMusic);
+  ok($adaptedHook->hasMelody(), "New hook music has melody");
+  $testCt++;
+  if ($hook->theHook()->duration * 2 > $otherMusic->duration()) {
+    ok($hook->theHook()->duration == $adaptedHook->melody()->duration, sprintf("Hook is %d and other music duration is %d, so we didn't repeat the hook (%d)",$hook->theHook->duration,$otherMusic->duration(),$adaptedHook->melody()->duration));
+  } else {
+    cmp_ok($adaptedHook->melody()->duration,">", $hook->theHook()->duration, "The length of that new melody is greater");
+  }
+  $testCt++;
+}
+done_testing($testCt);
+exit(0);

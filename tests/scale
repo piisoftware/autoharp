@@ -1,0 +1,196 @@
+#!/usr/bin/env perl
+use Test::More;
+use_ok AutoHarp::Scale;
+use_ok AutoHarp::Constants;
+use_ok AutoHarp::Event::Chord;
+use AutoHarp::Fuzzy;
+use MIDI;
+use Data::Dumper;
+
+my $testCount = 51;
+my $rPitch = $MIDI::note2number{'Gs4'};
+my $mScale = AutoHarp::Scale->new($ATTR_KEY => 'A flat minor');
+my $MScale = AutoHarp::Scale->new($ATTR_KEY => 'D Major');
+
+my $root  = AutoHarp::Event::Note->new($rPitch);
+my $third = $root->clone();
+$mScale->transposeEvent($third,2);
+my $fifth = $third->clone();
+$mScale->transposeEvent($fifth,2);
+is($mScale->rootPitch(),$root->pitch,"Key interpreter works ($rPitch)");
+is(lc($third->toString()),"b4","third is correct note");
+is(lc($fifth->toString()),'d#5',"fifth is correct note");
+my $rChord = $mScale->triad();
+my $tChord = $mScale->triadFromThird();
+my $fChord = $mScale->triadFromFifth();
+
+is($rChord->toString, 'G#m','Root chord is a Gsharpminor');
+is($rChord->toNotesString, 'Gs4 B4 Ds5','Chord consists of the correct notes');
+is($root->pitch, $rPitch, "Root is the right pitch");
+
+is($rChord->root()->pitch, $rPitch, 'Chord has correct root');
+is($rChord->third()->pitch, $third->pitch, 'Chord has correct third');
+
+is($tChord->third()->pitch, $root->pitch, 'Third triad has correct third');
+is($tChord->root()->pitch, $mScale->steps($root->pitch,-2), 'third triad has correct root');
+is($fChord->root()->pitch, $root->pitch - 7, 'fifth triad has correct root');
+
+foreach my $s ($mScale,$MScale) {
+  my $randInScale = $s->steps($root->pitch,(plusMinus() * int(rand(7) + 1)));
+  my $chordsIn = $s->chordsForPitch($randInScale);
+  ok(scalar @$chordsIn > 3,sprintf("At least three valid chords in %s containing %s",
+				    $s->key(),
+				    $MIDI::number2note{$randInScale}));
+  $testCount++;
+  foreach my $c (@$chordsIn) {
+    $testCount++;
+    ok(!$c->isUnclassified,sprintf("%s is a valid chord from %s in %s",
+				   $c->toString,
+				   $MIDI::number2note{$randInScale},
+				   $s->key()));
+  }
+  while (!$s->isAccidental($randInScale)) {
+    $randInScale++;
+  }
+  my $chordsOut = $s->chordsForPitch($randInScale);
+  ok(scalar @$chordsOut == 2,sprintf("Three valid chords in %s containing %s",
+				     $s->key(),
+				     $MIDI::number2note{$randInScale}));
+  $testCount++;
+  foreach my $c (@$chordsIn) {
+    ok(!$c->isUnclassified,sprintf("%s is a valid chord from %s in %s",
+				   $c->toString,
+				   $MIDI::number2note{$randInScale},
+				   $s->key()));
+    $testCount++;
+  }
+}
+my $accidental = $MIDI::note2number{'C4'};
+my $notes = $MScale->scaleNotes();
+my $sPitch = $MIDI::note2number{'D4'};
+for (my $i = 0; $i < scalar @$notes; $i++) {
+  is($notes->[$i],$sPitch,"Note $i of scale is $MIDI::number2note{$sPitch}");
+  $sPitch += $MAJOR_SCALE_INTERVALS->[$i];
+}
+
+is($MScale->scaleIndex($MIDI::note2number{'D4'}), 0, "Scale index of D is 0");
+is($MScale->scaleIndex($MIDI::note2number{'Fs4'}), 2, 'Scale index of Fsharp is 2');
+is($MScale->scaleIndex($MIDI::note2number{'G4'}), 3, 'Scale index of G is 3');
+is($MScale->scaleIndex($MIDI::note2number{'Gs4'}), 3.5, 'Scale index of Gsharp is 3.5');
+is($MScale->scaleIndex($MIDI::note2number{'A4'}), 4, 'Scale index of A is 4');
+is($MScale->scaleIndex($MIDI::note2number{'Cs5'}), 6, 'Scale index of Csharp is 6');
+
+ok($MScale->isAccidental($accidental), "C is an accidental in a D Major scale");
+is($MScale->steps($accidental, 1), $MIDI::note2number{'Cs4'}, 'One scale step up from C should be Csharp in a D scale');
+is($MScale->steps($MIDI::note2number{'B3'},1), $MIDI::note2number{'Cs4'}, 'One scale step up from B should be Csharp in a D scale');
+is($MScale->steps($accidental, -1), $MIDI::note2number{'B3'}, 'One scale step down from C should be B in a D scale');
+is($MScale->steps($accidental, -4), $MIDI::note2number{'Fs3'}, 'A fifth down from C should be Fsharp in a D scale');
+is($MScale->steps($accidental, 4), $MIDI::note2number{'Fs4'}, 'A fifth up from C should be Fsharp in a D scale');
+is($MScale->steps($MIDI::note2number{'B3'}, 3), $MIDI::note2number{'E4'}, 'A fourth up from B should be E in a D scale');
+is($MScale->steps($MIDI::note2number{'Cs4'}, 4), $MIDI::note2number{'G4'}, 'Four steps up from Csharp in a D scale should be a tritone');
+
+#test pentatonic steps
+is($MScale->pentatonicSteps($MIDI::note2number{'Cs4'},1),
+   $MIDI::note2number{'D4'},
+   "Pentatonic step up from C# is a D in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'Ds4'},-1),
+   $MIDI::note2number{'D4'},
+   "Pentatonic step down from D# is a D in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'E4'},3),
+   $MIDI::note2number{'B4'},
+   "3 Pentatonic steps up from E is a B in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'Cs4'},5),
+   $MIDI::note2number{'B4'},
+   "5 Pentatonic steps up from C# is a B in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'Cs4'},6),
+   $MIDI::note2number{'D5'},
+   "6 Pentatonic steps up from C# is an D in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'Cs4'},-5),
+   $MIDI::note2number{'D3'},
+   "5 Pentatonic steps down from C# is a D in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'Cs4'},-6),
+   $MIDI::note2number{'B2'},
+   "6 Pentatonic steps down from C# is a B in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'Fs4'},2),
+   $MIDI::note2number{'B4'},
+   "2 Pentatonic steps up from F# is a B in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'Fs4'},-2),
+   $MIDI::note2number{'D4'},
+   "2 Pentatonic steps down from F# is a D in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'D4'},5),
+   $MIDI::note2number{'D5'},
+   "5 Pentatonic steps up from D is a D in " . $MScale->key());
+is($MScale->pentatonicSteps($MIDI::note2number{'D4'},-10),
+   $MIDI::note2number{'D2'},
+   "10 Pentatonic steps down from D is a D in " . $MScale->key());
+is($mScale->pentatonicSteps($MIDI::note2number{'Gs4'},2),
+   $MIDI::note2number{'Cs5'},
+   "2 Pentatonic steps up from G# is C# in " . $mScale->key());
+is($mScale->pentatonicSteps($MIDI::note2number{'Ds5'},-4),
+   $MIDI::note2number{'Fs4'},
+   "4 Pentatonic steps down from D# is F# in " . $mScale->key());
+is($mScale->pentatonicSteps($MIDI::note2number{'A4'},-1),
+   $MIDI::note2number{'Gs4'},
+   "1 Pentatonic step down from A is G# in " . $mScale->key());
+is($mScale->pentatonicSteps($MIDI::note2number{'Fs4'},1),
+   $MIDI::note2number{'Gs4'},
+   "1 Pentatonic step up from F# is G# in " . $mScale->key());
+
+my $cScale = AutoHarp::Scale->new();
+
+is($cScale->scaleStepsBetween($MIDI::note2number{C3},
+			      $MIDI::note2number{B2}),
+   -1, "One step from b2 to c3");
+is($cScale->scaleStepsBetween($MIDI::note2number{A3},
+			      $MIDI::note2number{B2}),
+   -6, "four steps down from a3 to b2");
+is($cScale->scaleStepsBetween($MIDI::note2number{F7},
+			      $MIDI::note2number{G3}),
+   -27, "27 steps down from f7 to g3");
+is($cScale->scaleStepsBetween($MIDI::note2number{G4},
+			      $MIDI::note2number{B4}),
+   2, "Two steps from g4 to b4");
+is($cScale->scaleStepsBetween($MIDI::note2number{C7},
+			      $MIDI::note2number{As6}),
+   -1.5, "1.5 steps down from c7 to a#6");
+is($cScale->scaleStepsBetween($MIDI::note2number{E3},
+			      $MIDI::note2number{D5}),
+   13, "13 steps from e3 to d5");
+$testCount += 6;
+
+
+my $c = AutoHarp::Event::Chord->fromString('C');
+my $cNote = AutoHarp::Event::Note->new($MIDI::note2number{C4});
+my $eNote = AutoHarp::Event::Note->new($MIDI::note2number{E4});
+my $gNote = AutoHarp::Event::Note->new($MIDI::note2number{G4});
+my $aNote = AutoHarp::Event::Note->new($MIDI::note2number{As4});
+$cScale->transposeEventToScale($c,$mScale);
+$cScale->transposeEventToScale($cNote,$mScale);
+$cScale->transposeEventToScale($eNote,$mScale);
+$cScale->transposeEventToScale($gNote,$mScale);
+$mScale->transposeEventToScale($aNote,$cScale);
+
+is($cNote->pitch,
+   $MIDI::note2number{Gs3},
+   "Transposing a C in C gives us G# in A flat min");
+is($eNote->pitch,
+   $MIDI::note2number{B3},
+   "Transposing an E in C gives us B natural in A flat min");
+is($gNote->pitch,
+   $MIDI::note2number{Ds4},
+   "Transposing a G in C gives us D# in A flat min");
+
+
+is($c->toString(), 
+   'G#m',
+   "Transposing a C Major chord into the scale of Abmin gives us the appropriate root chord");
+is($aNote->pitch,
+   $MIDI::note2number{D4},
+   "Transposing a Bb in Abmin gives us a D in C Major");
+$testCount += 5;
+
+is($mScale->equivalentMajorScale()->key(),"B","Relative major of A Flat Minor is B");
+is($MScale->equivalentMajorScale()->key(),"D Major","Relative major of D is D");
+$testCount += 2;
+
+exit(!done_testing($testCount));

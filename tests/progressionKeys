@@ -1,0 +1,108 @@
+#!/usr/bin/env perl
+use Test::More; 
+use AutoHarp::Constants;
+use_ok AutoHarp::MusicBox::Base;
+use_ok AutoHarp::Events::Progression;
+use_ok AutoHarp::Events::Guide;
+use_ok AutoHarp::MusicBox::Base;
+
+use strict;
+use Data::Dumper;
+
+my $testCt = 4;
+my $dMix = 'D Mixolydian';
+my $fLyd = 'F Lydian';
+my $pStr = '|D / . C . . /|G / / /|F / . C . . /|G / / /|';
+my $guide = AutoHarp::Events::Guide->fromAttributes($ATTR_BARS => 4);
+my $prog  = AutoHarp::Events::Progression->fromString($pStr);
+my $music = AutoHarp::MusicBox::Base->new($ATTR_GUIDE => $guide);
+$music->progression($prog);
+my $clock = $music->clock();
+my $b = $clock->beatTime();
+my $m = $clock->measureTime();
+$music->repeat();
+is($music->measures(), 8, "Music is 8 measures after repeating");
+my $theirs = $music->progression->toString($music->guide());
+my $ours   = "$pStr$pStr";
+$theirs =~ s/\s//g;
+$ours =~ s/\s//g;
+$ours =~ s/\|+/|/g;
+is($theirs,$ours,"Progression to string is $pStr repeated");
+
+is($music->scaleAt($b * 1)->key, $dMix, "Key at start is $dMix");
+is($music->scaleAt($b * 3)->key, $dMix, "Key stays the same after chord change");
+is($music->scaleAt($m + $b)->key, $dMix, "Key stays the same after another chord change");
+is($music->scaleAt($m * 2)->key, $fLyd, "Key in the second part is $fLyd"); 
+is($music->scaleAt(($m * 2) + ($b * 3))->key, $fLyd, "That key stays the same after chord change");
+is($music->scaleAt($m * 3)->key, $fLyd, "That key stays the same after another chord change");
+my $pd = $b * 4 * 4;
+is($music->phraseDuration(), $pd, sprintf("Phrase duration is %d",$pd));
+is($music->scaleAt($pd)->key, $dMix, "When the phrase repeats, the key is $dMix Again");
+is($music->scaleAt($pd * 1.5)->key, $fLyd, "When the phrase gets to the second half of the second phrase, the repeats, the key is $fLyd. Again");
+is($music->scaleAt(($pd * 1.5) + (3 * $b))->key, $fLyd, "When the phrase gets to the second half of the second phrase, and the chord changes, the key is STILL $fLyd. Again");
+$testCt += 12;
+
+#C G D E B C G D
+my $weird  = '|C / G /|D/E/|B/C/|G/D/|';
+my $wGuide = AutoHarp::Events::Guide->fromAttributes($ATTR_BARS => 4);
+my $wProg  = AutoHarp::Events::Progression->fromString($weird);
+my $wMusic = AutoHarp::MusicBox::Base->new($ATTR_GUIDE => $wGuide);
+$wMusic->progression($wProg);
+is($wProg->duration(), $m * 4, "Progression is 4 measures");
+is($wMusic->duration(), $wProg->duration(),"Music duration is " . $wProg->duration());
+is($wMusic->scaleAt(0)->key, "C Lydian","Scale at the beginning is C Lydian");
+is($wMusic->scaleAt($m + ($b * 2))->key, "E Major","Scale in the third beat of 2nd measure is E Major");
+is($wMusic->scaleAt($m * 2)->key, "E Major","Scale at the third measure E Major");
+is($wMusic->scaleAt(($m * 2) + $m + ($b * 2))->key, "C Lydian","Scale in the third beat of 3rd measure is C Lydian");
+is($wMusic->scaleAtEnd()->key, "C Lydian","Scale at the end is is C Lydian");
+$testCt += 7;
+
+#C Am F G Am D7 G C
+my $peird  = '|C / Am /|F/G/|Am/D7/|G/C/|';
+my $pGuide = AutoHarp::Events::Guide->fromAttributes($ATTR_BARS => 4);
+my $pProg  = AutoHarp::Events::Progression->fromString($peird);
+my $pMusic = AutoHarp::MusicBox::Base->new($ATTR_GUIDE => $wGuide);
+$pMusic->progression($pProg);
+is($pProg->duration(), $m * 4, "Progression is 4 measures");
+is($pMusic->duration(), $pProg->duration(),"Music duration is " . $pProg->duration());
+is($pMusic->scaleAt(0)->key, "C Major","Scale at the beginning is C Major");
+is($pMusic->scaleAt($m + ($b * 2))->key, "C Major","Scale in the third beat of 2nd measure is C Major");
+is($pMusic->scaleAt(($m * 2) + ($b * 2))->key, "D Mixolydian","Scale in the third beat of 3rd measure is D Mixolydian");
+is($pMusic->scaleAtEnd()->key, "D Mixolydian","Scale at the end is is D Mixolydian");
+
+$testCt += 6;
+
+my $foo = '|G Am / /|Am Fmajor7 / /|Am C / /|Em / / /|F / / /|Dm Am7 / /|F Am / /|';
+my $fooProg = AutoHarp::Events::Progression->fromString($foo);
+is(scalar @{$fooProg->chords()}, 12, "Foo prog has 12 chords");
+is($fooProg->duration(), $m * 7, "Foo prog is 7 bars");
+$testCt += 2;
+
+my $bar = '|G Am .. C / /|Am Fmajor7.Am. / /|Am C / /|Em / / ..F.|';
+my $barProg = AutoHarp::Events::Progression->fromString($bar);
+is(scalar @{$barProg->chords()}, 10, "Bar prog has 9 chords");
+is($barProg->duration(), $m * 4, "Bar prog is 4 bars");
+is($barProg->chords()->[0]->duration, $b, "Chord one of bar prog is $b ticks");
+is($barProg->chords()->[1]->time, $b, "Chord two of bar prog occurs at $b ticks");
+is($barProg->chords()->[2]->duration, 2.25 * $b, sprintf("Chord three of bar prog is %d ticks",2.25 * $b));
+is($barProg->chords()->[3]->time, $m, sprintf("Chord four of bar prog occurs at %d ticks",$m));
+is($barProg->chords()->[4]->duration, $b/2, sprintf("Chord five of bar prog is %d ticks",$b/2));
+my $when5 = $m + (1.5 * $b);
+is($barProg->chords()->[5]->time, $when5, sprintf("Chord four of bar prog occurs at %d ticks",$when5));
+is($barProg->chords()->[5]->duration, 2.5 * $b, sprintf("Chord four of bar prog is %d ticks",2.5 * $b));
+is($barProg->chords()->[8]->duration, 3.5 * $b, sprintf("Chord eight of bar prog is %d ticks",3.5 * $b));
+is($barProg->chords()->[9]->time, (3 * $m) + (3.5 * $b), sprintf("Chord nine of bar prog occurs at %d ticks",(3 * $m) + (3.5 * $b)));
+is($barProg->chords()->[9]->duration, $b / 2, sprintf("Chord nine of bar prog is %d ticks",$b / 2));
+
+$testCt += 12;
+
+my $baz = '|Em / / /|C / / /|Am / / /|Am / / Gmflat11|Dm / / /|';
+my $bazProg = AutoHarp::Events::Progression->fromString($baz);
+my $bazMusic = AutoHarp::MusicBox::Base->new($ATTR_GUIDE => $pGuide);
+$bazMusic->progression($bazProg);
+is(scalar @{$bazProg->chords()}, 6, "Bar prog has 6 chords");
+is($bazMusic->scaleAt($b)->key,"E Minor","Key at the start of baz is E Minor");
+is($bazMusic->scaleAt($m * 3 + $b * 3)->key,"G Minor","Key at the Gmflat11 is G minor");
+$testCt += 3;
+
+done_testing($testCt);

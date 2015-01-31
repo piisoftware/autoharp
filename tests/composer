@@ -1,0 +1,51 @@
+#!/usr/bin/env perl
+use Test::More;
+use_ok AutoHarp::Composer;
+use_ok AutoHarp::Generator;
+use_ok AutoHarp::Events::Guide;
+use JSON;
+use AutoHarp::Constants;
+
+use strict;
+my $testCount = 14;
+my $gen   = AutoHarp::Generator->new();
+my $comp  = AutoHarp::Composer->new();
+my $guide = AutoHarp::Events::Guide->new();
+$guide->measures(4);
+my $verse = $gen->generateMusic($guide);
+is($verse->measures(),4,"Music is 4 measures");
+$verse->repeat();
+is($verse->measures,8,"Music is 8 measures after doubling");
+my $id = $verse->melody->id();
+ok($id ne 'MELODY_0',"Melody Id ($id) is something non-trivial");
+$verse->tag($SONG_ELEMENT_VERSE);
+is($verse->tag(),$SONG_ELEMENT_VERSE,"Music is correctly tagged");
+ok($verse->hasProgression(), "Music has progression");
+is($verse->melody->id, $id, "Melody's id hasn't changed from $id");
+$guide->measures(8);
+my $chorus = $gen->generateMusic($guide,$verse);
+$chorus->tag($SONG_ELEMENT_CHORUS);
+is($chorus->measures,8,"Chorus generated from verse is also 8 measures");
+is($chorus->tag,$SONG_ELEMENT_CHORUS,"Chorus is correctly tagged");
+my $bridge = $gen->generateMusic($guide, $chorus);
+$bridge->tag($SONG_ELEMENT_BRIDGE);
+is($bridge->measures,8,"Bridge generated from chorus is also 8 measures");
+is($bridge->tag,$SONG_ELEMENT_BRIDGE,"Bridge is correctly tagged");
+my $duration = $verse->duration();
+foreach my $e ($verse, $chorus, $bridge) {
+  $comp->addMusic($e);
+}
+
+$comp->compose();
+my $composition = $comp->composition();
+ok(scalar @$composition > 0,"Composition has multiple segments");
+
+foreach my $seg (@$composition) {
+  ok($seg->tag,"Comp segment is tagged " . $seg->tag);
+  $testCount++;
+}
+done_testing($testCount);
+exit(0);
+
+
+

@@ -1,0 +1,42 @@
+#!/usr/bin/env perl
+use Test::More;
+use AutoHarp::Constants;
+use AutoHarp::Fuzzy;
+use_ok AutoHarp::Generator;
+use_ok AutoHarp::Events::Guide;
+use MIDI;
+use strict;
+
+my $testCount = 2;
+my $gen    = AutoHarp::Generator->new();
+my $ps;
+for (1..4) {
+  my $randoBars = int(rand(4)) + 4;
+  my $scale  = AutoHarp::Scale->new(pickOne('D','F#','C Minor','G# Minor'));
+  my $guide  = AutoHarp::Events::Guide->fromAttributes($ATTR_BARS => $randoBars,
+						       $ATTR_SCALE => $scale);
+  my $randoTime = int(rand(8)) * $guide->clock->measureTime();
+  my $music  = $gen->generateMusic($guide);
+  my $melody = $music->melody();
+  foreach my $n (@{$melody->notes()}) {
+    $ps->{t}++;
+    $ps->{a}++ if ($scale->isAccidental($n->pitch));
+    $ps->{p}++ if ($scale->isPentatonic($n->pitch));
+  }
+  $music->time($randoTime);
+  printf "Scale: %s\n",$scale->key();
+  printf "Accidentals: %d% (%d of %d)\n",int(($ps->{a} * 100)/$ps->{t}),$ps->{a},$ps->{t};
+  printf "Pentatonics: %d% (%d of %d)\n",int(($ps->{p} * 100)/$ps->{t}),$ps->{p},$ps->{t};
+
+  is($music->measures(),$randoBars, "Music is $randoBars");
+  is($music->reach(), $randoTime + $randoBars * $music->clock->measureTime, "Music is however long, or whatever");
+  $gen->repeatMusic($music);
+  is($music->measures(),$randoBars * 2, "Music is now, like, twice that");
+  is($music->reach(), $randoTime + $randoBars * $music->clock->measureTime * 2, "Music is now twice however long, or whatever");
+  is($music->progression->reach(), $randoTime + $randoBars * $music->clock->measureTime * 2, "Progression is the same or whatever");
+  $testCount += 5;
+}
+ok(($ps->{a} / $ps->{t}) < .1,"Less that 10% accidentals");
+$testCount++;
+
+done_testing($testCount);

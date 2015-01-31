@@ -1,0 +1,77 @@
+#!/usr/bin/env perl
+use Test::More;
+use_ok AutoHarp::Events::Guide;
+use_ok AutoHarp::Conductor;
+use_ok AutoHarp::Composer;
+use_ok AutoHarp::Generator;
+use_ok AutoHarp::Instrument;
+use AutoHarp::Fuzzy;
+use AutoHarp::Constants;
+
+use strict;
+
+my @INSTRUMENT_BASE = ($RHYTHM_INSTRUMENT,
+		       $PAD_INSTRUMENT,
+		       $LEAD_INSTRUMENT,
+		       $HOOK_INSTRUMENT,
+		       $DRUM_LOOP,
+		       $BASS_INSTRUMENT,
+		       $THEME_INSTRUMENT);
+
+my $testCount = 8;
+
+my $gen       = AutoHarp::Generator->new();
+my $composer  = AutoHarp::Composer->new();
+my $conductor = AutoHarp::Conductor->new();
+my $guide     = AutoHarp::Events::Guide->new();
+$guide->measures(4);
+my $verse  = $gen->generateMusic($guide);
+my $chorus = $gen->generateMusic($guide,$verse);
+my $bridge = $gen->generateMusic($guide,$verse);
+$verse->tag($SONG_ELEMENT_VERSE);
+$chorus->tag($SONG_ELEMENT_CHORUS);
+$bridge->tag($SONG_ELEMENT_BRIDGE);
+my $hook = $gen->generateHook($verse);
+ok($hook->measures > 0,"Hook has some measures");
+
+foreach my $e ($verse, $chorus, $bridge) {
+  $composer->addMusic($e);
+}
+
+$composer->compose();
+my $composition = $composer->composition();
+ok(scalar @$composition > 0,"Composition has multiple segments");
+my $song = $conductor->conduct({$ATTR_COMPOSITION => $composition,
+				$ATTR_MUSIC => [$verse,$chorus,$bridge],
+				$ATTR_INSTRUMENTS => [map
+						      {AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $_)}
+						      @INSTRUMENT_BASE],
+				$ATTR_HOOK => $hook
+			       });
+ok($song->MMSS,"Song has duration " . $song->MMSS);
+
+my $time;
+my $segCt = 1;
+foreach my $segment (@{$song->segments()}) {
+  if (!$time) {
+    $time = $segment->time;
+  }
+  ok($segment->time == $time, sprintf("Segment %d time is %d",$segCt,$time));
+  $testCount++;
+  $time = $segment->reach();
+  $segCt++;
+}
+
+foreach my $score (@{$song->scores()}) {
+  ok($score->duration > 0, "Score has some notes");
+  my $blurg = ok($score->soundingTime >= 0,sprintf("Score sounding time (%d) is non-negative",$score->soundingTime));
+  $testCount += 2;
+  if (!$blurg) {
+    $score->dump();
+    last;
+  }
+}
+done_testing($testCount);
+exit(0);
+
+

@@ -1,0 +1,193 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/lib";
+
+use AutoHarp::Generator;
+use AutoHarp::Events::Guide;
+use AutoHarp::Instrument;
+use AutoHarp::Constants;
+use AutoHarp::Conductor;
+use AutoHarp::Composer;
+use AutoHarp::Genre;
+use AutoHarp::Clock;
+use AutoHarp::Scale;
+use AutoHarp::Fuzzy;
+use AutoHarp::Config;
+
+use File::Copy;
+use JSON;
+
+use strict;
+
+my $genreName = join(" ",@ARGV);
+while (!$genreName) {
+  $genreName = pickOne(AutoHarp::Genre::Genres());
+  if (!$genreName) {
+    die "Cannot find any genres!";
+  }
+  if ($genreName eq 'Metal' || $genreName eq 'Punk') {
+    #Fuck you, Punk. Fuck you, Metal
+    undef $genreName;
+  }
+}
+
+my $fName = "$genreName-" . time();
+$fName =~ s/\W//g;
+
+my @INSTS = ($DRUM_LOOP,
+	     $BASS_INSTRUMENT,
+	     $RHYTHM_INSTRUMENT,
+	     $PAD_INSTRUMENT,
+	     $LEAD_INSTRUMENT,
+	     $HOOK_INSTRUMENT);
+my $themes = pickOne(1,2,3);
+for (1..$themes) { 
+  push(@INSTS, $THEME_INSTRUMENT);
+}
+
+my $band  = {};
+foreach my $i (@INSTS) {
+  my $inst = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $i); 
+  my $uid = $i;
+  while (exists $band->{$uid}) {
+    $uid .= "1" if ($uid !~ /\d+$/);
+    $uid++;
+  }
+  $inst->uid($uid);
+  $band->{$uid} = $inst;
+}
+
+my $genre = AutoHarp::Genre->new($genreName);
+my $clock = $genre->suggestClock();
+my $scale = chooseScale();
+my $bars  = 8;
+my $guide = AutoHarp::Events::Guide->fromAttributes($ATTR_BARS => $bars,
+						    $ATTR_CLOCK => $clock,
+						    $ATTR_SCALE => $scale);
+my $generator = AutoHarp::Generator->new();
+my $composer  = AutoHarp::Composer->new();
+my $conductor = AutoHarp::Conductor->new();
+
+my $music = [];
+print "Generating verse\n";
+my $verse  = $generator->generateMusic($guide);
+print "Generating chorus\n";
+my $chorus = $generator->generateMusic($guide,(asOftenAsNot) ? $verse : undef);
+print "Generating bridge\n";
+my $bridge = $generator->generateMusic($guide,(asOftenAsNot) ? $verse : $chorus);
+print "Generating hook\n";
+my $hook   = $generator->generateHook((asOftenAsNot) ? $verse : $chorus);
+
+$verse->tag($SONG_ELEMENT_VERSE);
+$chorus->tag($SONG_ELEMENT_CHORUS);
+$bridge->tag($SONG_ELEMENT_BRIDGE);
+
+$verse->genre($genre);
+$chorus->genre($genre);
+$bridge->genre($genre);
+
+$composer->addMusic($verse);
+$composer->addMusic($chorus);
+$composer->addMusic($bridge);
+print "Composing...\n";
+$composer->compose();
+print "Conducting...\n";
+my $song = $conductor->conduct({$ATTR_COMPOSITION => $composer->composition(),
+				$ATTR_MUSIC => [$verse, $chorus, $bridge],
+				$ATTR_INSTRUMENTS => [values %$band],
+				$ATTR_HOOK => $hook
+			       });
+
+if (!$ENV{AUTOHARP_QUIET}) {
+  print "export AUTOHARP_QUIET=1 to be less verbose next time\n";
+}
+print "Genre is $genreName\n";
+print "Song Settings: ";
+print AutoHarp::Notation::CreateHeader($ATTR_CLOCK => $clock,
+				       $ATTR_SCALE => $scale);
+print "\n";
+my $midiOut = AutoHarp::Config::MidiFile($fName);
+my $jsonOut = AutoHarp::Config::DataFile($fName);
+$song->out($midiOut);
+print "Midi file is $midiOut\n";
+eval {
+  my $outData = {$ATTR_MUSIC => 
+		 {
+		  $SONG_ELEMENT_VERSE  => $verse->toDataStructure(),
+		  $SONG_ELEMENT_CHORUS => $chorus->toDataStructure(),
+		  $SONG_ELEMENT_BRIDGE => $bridge->toDataStructure(),
+		 },
+		 $ATTR_HOOK => $hook->toDataStructure(),
+		 $ATTR_INSTRUMENTS => [
+				       map {$_->toString()} 
+				       sort {$a->uid cmp $b->uid} 
+				       values %$band
+				      ],
+		 $ATTR_SONG => $song->toDataStructure()
+		};
+  
+  open(FILE, ">$jsonOut") or die "Can't write to $jsonOut: $!\n";
+  print FILE JSON->new()->pretty()->canonical()->encode($outData);
+  close(FILE);
+  print "Data file is $jsonOut\n";
+};
+if ($@) {
+  print "Failed to export song to data: $@\n";
+} 
+
+if (!AutoHarp::Config::Play($song)) {
+  print "Set env var MIDI_PLAYER to a valid command-line midi player to play midi file\n";
+}
+print "Rename this session,\n";
+print "'x' to annhiliate it entirely,\n";
+print "enter to accept '$fName' ==> "; 
+chomp(my $sName = <STDIN>);
+if (lc($sName) eq 'x') {
+  unlink($midiOut);
+  unlink($jsonOut);
+  print "Goodbye $fName. You have been deemed unworthy\n";
+} elsif ($sName) {
+  $sName =~ s/\.\w+$//;
+  my $toMidi = AutoHarp::Config::MidiFile($sName);
+  File::Copy::move($midiOut,$toMidi);
+  print "Session midi moved to $toMidi\n";
+  if (-f $jsonOut) {
+    my $toJson = AutoHarp::Config::DataFile($sName);
+    print "Session json moved to $toJson\n";
+    File::Copy::move($jsonOut,$toJson);
+  }
+}
+exit(0);
+
+sub chooseScale {
+  my $seed = int(rand() * 100);
+  my $pct = 100;
+  #key frequency taken from hooktheory.com
+  my @wheel = map {{pct => $_->[0], key => $_->[1]}} ([26, 'C'],
+						      [12, 'G'],
+						      [10, 'E flat'],
+						      [9, 'F'],
+						      [8, 'D'],
+						      [8, 'A'],
+						      [7, 'E'], 
+						      [7, 'D flat'],
+						      [5, 'B flat'],
+						      [4, 'A flat'],
+						      [2, 'B'],
+						      [2, 'F sharp']);
+  my $key;
+  foreach my $w (reverse @wheel) {
+    $pct -= $w->{pct};
+    if ($seed >= $pct) {
+      $key = $w->{key};
+      last;
+    }
+  }
+  $key ||= $wheel[0]->{key};
+  my $scale = AutoHarp::Scale->new($key);
+  if (sometimes) {
+    #go minor
+    $scale->toRelativeMinor();
+  }
+  return $scale;
+}

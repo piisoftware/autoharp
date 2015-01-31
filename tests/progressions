@@ -1,0 +1,119 @@
+#!/usr/bin/env perl
+use Test::More; 
+use AutoHarp::Constants;
+use_ok AutoHarp::MusicBox::Base;
+use_ok AutoHarp::Events::Progression;
+use_ok AutoHarp::Generator;
+use_ok AutoHarp::Events::Guide;
+
+use strict;
+use Data::Dumper;
+
+my $testCt = 14;
+
+my $generator = AutoHarp::Generator->new();
+my $guide  = AutoHarp::Events::Guide->new();
+my $fScale = AutoHarp::Scale->new($ATTR_KEY => 'F');
+my $clock  = AutoHarp::Clock->new($ATTR_TEMPO => 122);
+my $bScale = AutoHarp::Scale->new($ATTR_KEY => 'B flat major');
+
+#is($clock->signature(),'4/4','Signature set correctly');
+#is($clock->tempo(),122,'Tempo set correctly');
+#is($fScale->key,'F','Scale set correctly');
+#is($bScale->key,'B Flat Major','Second scale set correctly');
+
+$guide->setScale($fScale);
+$guide->setClock($clock);
+my $scaleChangeTime = $clock->measureTime * 2;
+$guide->setScale($bScale,$scaleChangeTime);
+$guide->setEnd($scaleChangeTime * 2);
+my $music = AutoHarp::MusicBox::Base->new();
+$music->guide($guide);
+$music->time($scaleChangeTime);
+my $randomBeforeTime = $clock->measureTime * 4 - (int(rand($clock->measureTime) + 10));
+my $randomAfterTime  = $clock->measureTime * 4 + int(rand($clock->measureTime));
+my $befScale = $music->scaleAt($randomBeforeTime);
+my $afScale = $music->scaleAt($randomAfterTime);
+ok($music->clock->equals($clock),'Clocks match at time zero');
+ok($music->scale->equals($fScale), 'Scales match at time zero');
+
+ok($befScale->equals($fScale), "Scales at $randomBeforeTime match (" . $befScale->key . " versus " . $fScale->key . ")");
+
+ok($afScale->equals($bScale), "Scales at $randomAfterTime match (" . $afScale->key . " versus " . $bScale->key . ")");
+is($music->duration, $clock->measureTime * 4, "Music is 4 measures"); 
+is($music->measures, 4, "No, really, music is 4 measures");
+is($music->reach, ($clock->measureTime * 4) + $scaleChangeTime, "Music reach is four measures after $scaleChangeTime");
+my $prog = $generator->generateChordProgression($music)->clone();
+$music->repeat();
+is($music->duration(), $clock->measureTime * 8, "Music is 8 measures after repeating");
+is($music->progression->duration(), $clock->measureTime * 8, "Progression is 8 measures after repeating");
+is($music->measures(), 8, "No, really, music is 8 measures after repeating");
+
+my $newMusic = $music->clone();
+$generator->shuffleChordProgression($newMusic);
+
+my $originalChords = $prog->chords();
+my $doubledChords  = $music->progression()->chords();
+my $shuffledChords = $newMusic->progression()->chords();
+my $pCt = scalar @$originalChords;
+my $oSeen = {};
+my $sSeen = {};
+my $ok = 1;
+for (my $i = 0; $i < $pCt; $i++) {
+  my $oC = $originalChords->[$i];
+  my $sC = $shuffledChords->[$i];
+  $ok &= is($oC->rootLetter, $doubledChords->[$i + $pCt]->rootLetter, "Chord " . $oC->toString() . " has the same root the second time around");
+  $ok &= is($oC->chordType, $doubledChords->[$i + $pCt]->chordType, "Chord " . $oC->toString() . " has the same type the second time around");
+  my $orTime = $oC->time() + int(rand($oC->duration));
+  my $osTime = $sC->time() + int(rand($sC->duration));
+  is($music->progression->chordAt($orTime)->toString(), $oC->toString(), "Chord at $orTime is correct in original progression");
+  is($newMusic->progression->chordAt($osTime)->toString(), $sC->toString(), "Chord at $orTime is correct is shuffled progression");
+  #chord must match the chord that was there 
+  if ($sC->rootLetter() ne $shuffledChords->[$i + $pCt]->rootLetter() ||
+      $sC->chordType() ne $shuffledChords->[$i + $pCt]->chordType()) {
+    $ok &= is($doubledChords->[$i + $pCt]->rootLetter(), $shuffledChords->[$i + $pCt]->rootLetter(), "Chord " . $shuffledChords->[$i + $pCt]->toString() . " root matches the original last chord");
+    $ok &= is($doubledChords->[$i + $pCt]->chordType(), $shuffledChords->[$i + $pCt]->chordType(), "Chord " . $shuffledChords->[$i + $pCt]->toString() . " type matches the original last chord");
+  } else {
+    $ok &= is($sC->rootLetter(), $shuffledChords->[$i + $pCt]->rootLetter(), "Chord " . $sC->toString() . " has the same root the second time around");
+    $ok &= is($sC->chordType(), $shuffledChords->[$i + $pCt]->chordType(), "Chord " . $sC->toString() . " has the same type the second time around");
+  }
+  $testCt += 6;
+  $oSeen->{$oC->rootLetter . $oC->chordType}++;
+  $sSeen->{$sC->rootLetter . $sC->chordType}++;
+}
+while (my ($key,$no) = each %$oSeen) {
+  $ok &= is($no,$sSeen->{$key},"$key was seen in original and shuffled $no time(s)");
+  $testCt++;
+}
+
+my $pd = $music->phraseDuration();
+ok($pd <= $music->duration(), "Phrase $pd is not longer than the music itself, " . $music->duration());
+$testCt++;
+my $ticker = $music->time;
+while ($ticker + $pd < $music->reach()) {
+  my $f = $music->progression->chordAt($ticker);
+  my $s = $music->progression->chordAt($ticker + $pd);
+  ok($f->isSubstitution($s),sprintf("%s is substitution for %s at the start of the next phrase",$f->toString(),$s->toString()));
+  ok($s->isSubstitution($f),sprintf("...and vice versa"));
+  $testCt += 2;
+  $ticker += $pd;
+}
+
+my $randTime = int(rand($pd)) + $music->time;
+is($music->timeToEndOfPhrase($randTime),$music->time + $music->phraseDuration() - $randTime,sprintf("Time from %d to %d should be %d,",$randTime,$music->time + $music->phraseDuration(),$music->timeToEndOfPhrase($randTime)));
+$testCt++;
+
+if (!$ok) {
+  print "ORIG:\n";
+  grep {$_->dump} @$originalChords;
+  print "DOUBLED:\n";
+  grep {$_->dump} @$doubledChords;
+  print "SHUFFLED:\n";
+  grep {$_->dump} @$shuffledChords;
+}
+
+done_testing($testCt);
+exit(0);
+
+
+

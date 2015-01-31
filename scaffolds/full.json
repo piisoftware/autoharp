@@ -1,0 +1,89 @@
+{
+   "hook" : [
+      "meter: 4/4, tempo: 129, key: A Minor",
+      "|ggd'd'|e'/2f'/2g'/2e'/2d'2|c'c'bb|aag2|ggd'd'|e'/2f'/2g'/2e'/2d'2|c'c'bb|aage'|a4|"
+   ],
+   "instruments" : [
+      "uid: bass, instrumentClass: bass, patch: Electric Bass(finger)",
+      "uid: drumLoop, instrumentClass: drumLoop, patch: Drum Loop",
+      "uid: hook, instrumentClass: hook, patch: Marimba",
+      "uid: pad, instrumentClass: pad, patch: Pad 8",
+      "uid: rhythm, instrumentClass: rhythm, patch: Electric Piano",
+      "uid: theme, instrumentClass: theme, patch: Electric Guitar(muted), themeIdentity: earworm",
+      "uid: theme2, instrumentClass: theme, patch: Kalimba, themeIdentity: slowTheme",
+      "uid: theme3, instrumentClass: theme, patch: Choir Aahs, themeIdentity: flowTheme"
+   ],
+   "music" : {
+       "chorus" : [
+         "meter: 4/4, tempo: 129, key: A Minor",
+           "|Am / G / |F / G / |Am / G / |F / G / |Am / G / |F / G / |Am / G / |F / G /|" 
+       ],
+       "verse" : [
+           "meter: 4/4, tempo: 129, key: A Minor",
+           "|Am / G / |Am / G / |Am / G / |Am / G / |Am / G / |Am / G / |Am / G / |Am / G / |"
+       ]
+   },
+   "song" : [
+      {
+         "firstHalfPlayers" : "bass, drumLoop, rhythm",
+         "music" : "verse",
+         "secondHalfPlayers" : "bass, drumLoop, rhythm",
+         "tag" : "intro"
+      },
+      {
+         "firstHalfPlayers" : "bass, drumLoop, rhythm, hook",
+         "music" : "verse",
+         "secondHalfPlayers" : "bass, drumLoop, rhythm, hook",
+         "tag" : "intro"
+      },
+      {
+         "firstHalfPlayers" : "bass, drumLoop, rhythm",
+         "music" : "verse",
+         "secondHalfPlayers" : "bass, drumLoop, rhythm",
+         "tag" : "verse"
+      },
+      {
+         "firstHalfPlayers" : "bass, drumLoop, rhythm, theme",
+         "music" : "verse",
+         "secondHalfPlayers" : "bass, drumLoop, rhythm, theme",
+         "tag" : "instrumental"
+      },
+       {
+         "firstHalfPlayers" : "bass, drumLoop, pad, rhythm",
+         "music" : "chorus",
+         "secondHalfPlayers" : "bass, drumLoop, pad, rhythm, theme2",
+         "tag" : "chorus"
+      },
+      {
+          "firstHalfPlayers" : "bass, drumLoop, hook, rhythm, theme2",
+          "music" : "chorus",
+          "secondHalfPlayers" : "bass, drumLoop, hook, rhythm, theme2",
+          "tag" : "instrumental"
+      },       
+      {
+         "firstHalfPlayers" : "bass, drumLoop, pad",
+         "music" : "verse",
+         "secondHalfPlayers" : "bass, drumLoop, pad, theme",
+         "tag" : "verse"
+      },
+      {
+         "firstHalfPlayers" : "bass, drumLoop, pad, rhythm, theme",
+         "music" : "chorus",
+         "secondHalfPlayers" : "bass, drumLoop, pad, rhythm, theme, theme3",
+         "tag" : "chorus"
+      },
+      {
+         "firstHalfPlayers" : "bass, drumLoop, pad, rhythm, theme3, hook",
+         "music" : "chorus",
+         "secondHalfPlayers" : "bass, drumLoop, pad, rhythm, theme3, hook",
+         "tag" : "chorus"
+      },
+      {
+         "firstHalfPlayers" : "bass, drumLoop, rhythm, hook",
+         "music" : "verse",
+         "secondHalfPlayers" : "bass, drumLoop, rhythm, hook",
+         "tag" : "outro",
+         "transition" : "down"
+      }
+   ]
+}

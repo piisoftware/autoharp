@@ -1,0 +1,55 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/lib";
+
+use AutoHarp::Constants;
+use AutoHarp::Events;
+use AutoHarp::Scale;
+use MIDI;
+use strict;
+
+my $file = $ARGV[0];
+my $amount = $ARGV[1];
+
+if (!-f $file || $amount == 0) {
+  die "usage: shiftPitch <midi file> <half steps>\n";
+}
+my $tracks = AutoHarp::Events->fromFile($file);
+my $guide  = shift(@$tracks);
+foreach my $t (@$tracks) {
+  foreach my $e (grep {$_->isNote() && !$_->isPercussion()} @$t) {
+    $e->pitch($e->pitch + $amount);
+  }
+}
+my $scale    = $guide->scale();
+my $newScale = $scale->newScaleFromHalfSteps($amount);
+$guide->setScale($newScale,0);
+
+foreach my $e (grep {$_->time > 0 && $_->isScale()} @$guide) {
+  my $newScale = AutoHarp::Scale->fromMidiEvent($e)->newScaleFromHalfSteps($amount);
+  my $newMidi  = $newScale->key2MidiEvent($e->time);
+  for(my $i = 0; $i < scalar @$e; $i++) {
+    #replace the guts of e with the guts of newMidi
+    $e->[$i] = $newMidi->[$i];
+  }
+}
+my $newKey  = $newScale->key();
+$newKey =~ s/\W//g;
+my $newName = $file;
+if ($newName =~ /(\.\w+)$/) {
+  $newName =~ s/(\.\w+)$/$newKey$1/;
+} else {
+  $newName .= $newKey;
+}
+
+my $newOpus = MIDI::Opus->new({format => 1,
+			       ticks => $TICKS_PER_BEAT,
+			       tracks => [map {$_->track} ($guide,@$tracks)]
+			      });
+$newOpus->write_to_file($newName);
+print "Output is $newName\n";
+exit(0);
+
+
+
+  

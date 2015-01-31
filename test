@@ -1,0 +1,24 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+
+use TAP::Harness;
+use Carp;
+use strict;
+use Cwd;
+
+my $dir = "$Bin/tests";
+my $lib = "$Bin/lib";
+
+
+my $harness = TAP::Harness->new({verbosity => 1, lib => [$lib]});
+$ENV{AUTOHARP_DB_ROOT} = "$Bin/db";
+
+my $testsToRun = join(" ",@ARGV);
+my $failures;
+opendir(TESTS, $dir);
+my @tests = map {"$dir/$_"} 
+  grep {!$testsToRun || $testsToRun =~ /$_/i}
+  grep {$_ =~ /\w$/ && -X "$dir/$_"} readdir(TESTS);
+
+
+exit($harness->runtests(@tests));
