@@ -32,10 +32,19 @@ my @StartGenres = ('Country',
 		   'World'
 		  );
 
-my $GenreList = AutoHarp::Genre::Genres();
+my $GenreList;
+#this may fail if there are no genres
+eval {
+  $GenreList = AutoHarp::Genre::Genres();
+};
+if ($@) {
+  print "No genres found yet\n";
+}
+
 foreach my $s (@StartGenres) {
   push(@$GenreList,$s) if (!scalar grep {$_ eq $s} @$GenreList);
 }
+
 recProc($dir);
 
 exit(0);
