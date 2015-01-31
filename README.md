@@ -90,11 +90,11 @@ A: I'm glad you asked that. The best thing to do is generate a song first and th
 
 Here's the chorus for a song I just generated:
 
-<code>"chorus" : [
+<code><pre>"chorus" : [
     "meter: 4/4, tempo: 93, swingPercentage: 9, swingNote: sixteenth, key: B Flat, genre: Big Easy",
     "|A# / / /|Gm / / /|D# / / /|A# / / /|A# / / /|Gm / / /|D# / / /|A# / / /|",        
     "|_b/2_b'/2f'/2d'/2d'/2_b/2_b/4f'/2f'/4|g/2G/2c/2_e/2_e/2g/2g/4c/2c/4|_e/2_E/2A/2c/2c/2_e/2_e/4A/2A/4|_b/2_B/2_e/2g/2g/2_b/2_b/4_e/2_e/4|_b/2_b'/2f'/2d'/2d'/2_b/2_b/4f'/2f'/4|g/2G/2c/2_e/2_e/2g/2g/4c/2c/4|_e/2_E/2A/2c/2c/2_e/2_e/4A/2A/4|_b/2_B/2_e/2g/2g/2_b/2_b/4_e/2_e/4|"
-],</code>
+],</pre></code>
 
 A musical element (like a chorus or a verse) in autoharp is a three (or more) element array:
 
@@ -107,7 +107,7 @@ A musical element (like a chorus or a verse) in autoharp is a three (or more) el
         - It uses "#" and "b" (that's a small ‘B’) to specify sharp and flat when speaking about notes, and the words “sharp” and “flat” when speaking about intervals. So “Bb9” is a Bb major triad with a ninth, and “Bflat9” is a B major triad with a C in it. Which is a weird-ass chord. MIDI itself is well-tempered, so I had to kind of jury-rig the whole flat/sharp thing.   
         - I haven't tested every possible way to spell a chord. If you enter something it can’t parse, it’ll scream at you** to try again.   
     - A "/" represents a beat (whatever the note of the beat is, e.g. quarter note in 4/4), a "." represents a quarter of that beat, and the chord spelling itself represents exactly one of whatever it's next to.  
-    - e.g. the verse chords to "Billie Jean" (which is syncopated) would be<pre><code>|Em.....F#min over E. / /|G over D.....F#min over E. / /|</code></pre> repeated. 
+    - e.g. the verse chords to "Billie Jean" (which is syncopated) would be <code>|Em.....F#min over E. / /|G over D.....F#min over E. / /|</code> repeated. 
     - If you write out a chord measure without the correct number of beats in it, the program will self-destruct***. 
 - LINE 3: A melody, written in ABC Music Notation. 
 
@@ -139,10 +139,10 @@ A: That’s right; you do need to be careful about commas and squiggly brackets 
 
 The hook is a simple melody; observe that it stands in its own section in the JSON file and has no chord progression. It’s usually just two lines. Let’s look at the one from “fromHook.json”:
 
-<code>"hook" : [
+<code><pre>"hook" : [
   "meter: 4/4, tempo: 129, key: A Minor",
   "|ggd'd'|e'/2f'/2g'/2e'/2d'2|c'c'bb|aage'|"
-]</code>
+]</pre></code>
 
 At run time, the hook will be adapted onto the chord progression and key of each musical section, and repeated as many times as will fit into that section. It is played by the “hook” instrument (see below), so if the hook (instrument) is one of the players in a given song segment, you will hear the hook (music).
 
@@ -160,7 +160,7 @@ AutoHarp has seven instrument classes:
 - theme 
 
 Each can be assigned one of 128 MIDI instrument patches save DrumLoop, which will always, like, be drums. Each instrument plays according to rules as befit its role in the band. The band is represented as a list in the JSON file:
-<code>"instruments" : [
+<code><pre>"instruments" : [
  "uid: bass, instrumentClass: bass, patch: Electric Bass(finger)",
  "uid: drumLoop, instrumentClass: drumLoop, patch: Drum Loop", 
  "uid: hook, instrumentClass: hook, patch: Marimba", 
@@ -169,7 +169,7 @@ Each can be assigned one of 128 MIDI instrument patches save DrumLoop, which wil
  "uid: theme, instrumentClass: theme, patch: Electric Guitar(muted), themeIdentity: earworm", 
  "uid: theme2, instrumentClass: theme, patch: Kalimba, themeIdentity: slowTheme", 
  "uid: theme3, instrumentClass: theme, patch: Choir Aahs, themeIdentity: flowTheme"
- ],</code>
+ ],</pre></code>
 You can add or remove instruments as you wish. Patch values can be broad (“piano” or “guitar” and AutoHarp will choose one that matches ) or specific (e.g. “Electric Piano 2”, “Electric Guitar (muted)”). The list of MIDI instrument names can be found here: [http://www.midi.org/techspecs/gm1sound.php](http://www.midi.org/techspecs/gm1sound.php). The Theme instrument has several subtypes (which control what kind of theme it plays). They are:
 - ‘slowTheme’: plays in quarter or half notes 
 - ‘fastTheme’: plays in eighth or sixteenth notes 
@@ -183,7 +183,7 @@ You can add or remove instruments as you wish. Patch values can be broad (“pia
 
 The song is a list of the sections of the song, what kind of section it is, what instruments play, and what music it uses. Here’s a section of one (from full.json in the scaffolds directory):
 
-<code>...
+<code><pre>...
 {
  "firstHalfPlayers" : "bass, drumLoop, rhythm",
  "music" : "verse", 
@@ -191,7 +191,7 @@ The song is a list of the sections of the song, what kind of section it is, what
  "tag" : "intro",
  "transition": "up"
 },
-...</code>
+...</pre></code>
 
 AutoHarp will, whenever possible, split blocks of music into two halves and conduct each separately; sometimes instruments will start playing in the second half of the segment, as is seen above with the hook. The names here correlate to the “uid” values in the instrument list. The “music” corresponds to the key name of the music (verse, chorus, bridge), and the tag is what this section technically is. Transition is whether the song builds up, comes down, or stays where it is at the end of this section (valid transition values are “up”,”down”, and “straight”; “straight” is the default value).
 
