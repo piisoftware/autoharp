@@ -33,7 +33,7 @@ Honest to God, I have no idea. It kind of just does. I wrote it and then A Mirac
 <h3>SEEDING THE SOFTWARE</h3>
 
 - AutoHarp cannot brain by itself. It has the dumb and needs a repository of MIDI drum loops in order to do anything interesting (PRO TIP: Google "Free MIDI drum loops" to find some). In order to add them, run the "import" tool found in this package.
-<pre><code>&gt;import /directory/where/your/loops/are</pre></code> 
+<pre><code>&gt;import /directory/where/your/loops/are</code></pre> 
 - It will probably ask you for the name of a musical genre under which to file each loop unless (PRO TIP again) your loops are sorted into directories named for the genre they belong in.   
     - Example: if your Hip Hop loops are in a directory called "hiphop" (case and spacing don’t matter) and the first time it asks you what genre they are you type "Hip Hop", it'll magically* sort the rest of them. 
     - You can also name the files (or subdirectories they’re in) with things like “verse”, “chorus”, “fill,” and the program will categorize them appropriately.
@@ -43,7 +43,7 @@ Honest to God, I have no idea. It kind of just does. I wrote it and then A Mirac
 <h3>OKAY, NOW LET'S MAKE SOME MUSIC</h3>
 
 Generate a song:
-  <pre><code>./generate &lt;optional genre name&gt;</pre></code>
+  <pre><code>./generate &lt;optional genre name&gt;</code></pre>
 - set the environment variable AUTOHARP_QUIET=omfgyes (or anything true) to be less chatty. 
 - set the environment variable MIDI_PLAYER to the name of your MIDI player if you have one and didn't specify it during the "./configure" stage (you can also just run configure again safely). 
 - Omit the genre name and AutoHarp will choose from one that it knows. Type in a bunk genre name to get a list of valid ones. 
@@ -52,13 +52,13 @@ Output of this song will be one MIDI file and one JSON file. Their locations wil
 
 Regenerate a song:
 
-  <pre><code>./regenerate &lt;a JSON file, either from the program or the user&gt;</pre></code>
+  <pre><code>./regenerate &lt;a JSON file, either from the program or the user&gt;</code></pre>
   
 The JSON file output by the program can be altered and run again. Different things will happen. For more information on this, do not stop reading at the end of this section, but instead continue to read.
 
 One other handy tool:
 
-  <pre><code>./shiftPitch &lt;path to midi file&gt; &lt;number of half steps&gt;</pre></code>
+  <pre><code>./shiftPitch &lt;path to midi file&gt; &lt;number of half steps&gt;</code></pre>
 
 Shift a given midi file up or down a given number of half steps. e.g. 
 <pre><code>shiftPitch eFlat.midi -3</code></pre> will take a MIDI file that starts in E Flat and put it into a starting key of C. 
