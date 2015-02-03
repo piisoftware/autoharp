@@ -149,8 +149,9 @@ sub kickNote {
   my $next  = shift;
 
   my $chord     = $music->progression->chordAt($kick->time);
-  my $rootPitch = $chord->rootPitch();
-  my $bp        = $self->bassPitch($rootPitch);
+  my $bassPitch = $chord->bassPitch();
+
+  my $bp        = $self->bassPitch($bassPitch);
   my $clock     = $music->clockAt($kick->time);
   my $nb        = ($next) ? $next->time - $kick->time :
     $clock->toNextBeat($kick->time);
@@ -182,16 +183,19 @@ sub kickNote {
     #are we going somewhere new next beat? Can we find a note in between?
     if ($nextChord && !$nextChord->equals($chord)) {
       my $steps = 
-	$scale->scaleStepsBetween($rootPitch, $nextChord->rootPitch());
+	$scale->scaleStepsBetween($bassPitch, $nextChord->bassPitch());
       if (abs($steps) > 1) {
 	#yes--split the diff
-	my $walkingPitch = $scale->steps($rootPitch,int($steps/2));
+	my $walkingPitch = $scale->steps($bassPitch,int($steps/2));
 	$note->pitch($self->bassPitch($walkingPitch));
       } 
+    } elsif ($chord->rootPitch() != $bassPitch && asOftenAsNot) {
+      #chord has another root! use it
+      $note->pitch($self->bassPitch($chord->rootPitch()));
     } elsif ($wasRoot && sometimes) {
       $note->pitch($self->bassPitch($chord->fifth()->pitch));
     } elsif ($wasRoot && sometimes) {
-      $note->pitch($self->bassPitch($scale->steps($rootPitch, pickOne(1,-1))));
+      $note->pitch($self->bassPitch($scale->steps($bassPitch, pickOne(1,-1))));
     } 
   }
   return $note;

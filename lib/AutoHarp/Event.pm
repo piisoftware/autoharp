@@ -57,9 +57,6 @@ sub new {
     confess "Argument to $class must be an array";
   } else {
     my $type = $event->[0];
-    if (!__validEvent($type)) {
-      confess "$type is an invalid type of event for $class";
-    }
     if ($type eq $EVENT_TEXT) {
       return AutoHarp::Event::Text->new($event);
     } elsif ($type eq $EVENT_MARKER) {

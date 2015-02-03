@@ -60,12 +60,17 @@ Regenerate a song:
   
 The JSON file output by the program can be altered and run again. Different things will happen. For more information on this, do not stop reading at the end of this section, but instead continue to read.
 
-One other handy tool:
+Other handy tools:
 
   <code>./shiftPitch &lt;path to midi file&gt; &lt;number of half steps&gt;</code>
 
 Shift a given midi file up or down a given number of half steps. e.g. 
 <code>shiftPitch eFlat.midi -3</code> will take a MIDI file that starts in E Flat and put it into a starting key of C. 
+
+  <code>./audition &lt;path to json file&gt; &lt;part you want to audition&gt;</code>
+
+Play a bit of music from a json file, such as a verse or a chorus, e.g.
+<code>audition scaffolds/full.json hook</code> will play the hook that's written in the full.json file. 
 
 <h3>PROGRAMMING AUTOHARP</h3>
 

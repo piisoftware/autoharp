@@ -36,22 +36,23 @@ sub new {
 sub fromString {
   my $class   = shift;
   my $val     = shift;
-  my $noteStr = uc($val);
+  $val =~ s/\s//g;
+  my ($note,$accident,$number) = 
+    ($val =~ /^([a-g])(\D*)(\d+)?$/i);
   my $pitchOffset = 0;
-  $noteStr =~ s/\s//g;
-  $noteStr =~ s/(SHARP|\#)/s/;
-  if ($noteStr =~ /^[A-G](FLAT)/) {
-    $noteStr =~ s/$1//;
+  $accident = 's' if ($accident =~ /(sharp|\#)/i);
+  if (lc($accident) eq 'flat' || lc($accident) eq 'b') {
+    #flat me!
+    $accident = "";
     $pitchOffset = 1;
   }
-  my ($letter,$number) = ($noteStr =~ /([A-G]s?)(\d+)?/);
   $number ||= 4;
-  $noteStr = "$letter$number";
+  my $noteStr = "$note$accident$number";
   if (exists $MIDI::note2number{$noteStr}) {
     my $pitch = $MIDI::note2number{$noteStr} - $pitchOffset;
     return $class->new($pitch,@_);
   }
-  return;
+  confess "$val was an invalid note";
 }
 
 sub toNote {

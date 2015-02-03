@@ -1,0 +1,76 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/lib";
+
+use MIDI;
+
+use AutoHarp::MusicBox::Base;
+use AutoHarp::Constants;
+use AutoHarp::Fuzzy;
+use AutoHarp::Config;
+
+use File::Copy;
+
+use JSON;
+use strict;
+
+my $file = $ARGV[0];
+my $part = $ARGV[1];
+
+if (!$file) {
+  die "usage: audition <json file> <verse|chorus|bridge|whatever>\n";
+}
+
+if (!-f $file) {
+  $file = AutoHarp::Config::DataFile($file);
+}
+
+my $fName = ($file =~ /(\w+)\.?\w*$/)[0];
+open(DATA, $file) or die "Couldn't find $file\n";
+my $str;
+while (<DATA>) {
+  $str .= $_;
+}
+close(DATA);
+my $ds;
+eval {
+  $ds = JSON->new->decode($str);
+}; 
+if ($@ || !$ds) {
+  die "Couldn't parse the content in $file into valid json ($@)\n";
+}
+my $mData = $ds->{$ATTR_MUSIC} || {};
+my $hData = $ds->{$ATTR_HOOK};
+my $box;
+if ($part) {
+  if ($mData->{$part}) {
+    $box = AutoHarp::MusicBox::Base->fromDataStructure($mData->{$part});
+  } elsif ($part eq $ATTR_HOOK && $hData) {
+    $box = AutoHarp::MusicBox::Hook->fromDataStructure($hData);
+  } else {
+    die "$file doesn't appear to have a $part\n";
+  }
+} elsif ($hData) {
+  $box = AutoHarp::MusicBox::Hook->fromDataStructure($hData);
+} elsif (scalar keys %$mData) {
+  my $ds = $mData->{$SONG_ELEMENT_VERSE} ||
+    $mData->{$SONG_ELEMENT_CHORUS} ||
+      $mData->{pickOne(keys %$mData)};
+  $box = AutoHarp::MusicBox::Base->fromDataStructure($ds);
+}
+
+if (!$box) {
+  die "Found nothing in $file to play\n";
+}
+
+my $opus = MIDI::Opus->new( {
+			     format => 1,
+			     ticks => $TICKS_PER_BEAT,
+			     tracks => $box->tracks()
+			    }
+			  );
+
+if (!AutoHarp::Config::PlayOpus($opus)) {
+  print "Unable to play.\n";
+}
+exit(0);

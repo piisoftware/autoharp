@@ -176,9 +176,11 @@ sub fromString {
   #set type and additional pitches of chord
   my $type = $MAJOR;
   my $pitches = [4,7];
-  #strip off extraneous "major"
-  $typeStr =~ s/^(maj|major)([^\do])/$2/;
-  if ($typeStr =~ /^(minor|min|m)([^a]|\z)/) {
+
+  #strip off "major" if it's not talking about an interval
+  if ($typeStr =~ s/^(maj|major)([^\do])/$2/) {
+    #do nothing else, just don't make this chord something it isn't
+  } elsif ($typeStr =~ /^(minor|min|m)([^a]|\z)/) {
     $typeStr =~ s/$1//;
     $type = $MINOR;
     $pitches = [3,7];
@@ -213,7 +215,7 @@ sub fromString {
 	shift(@$pitches);
 	#buh-bye third
 	last;
-      }
+      } 
     }
   }
   
@@ -450,6 +452,10 @@ sub root {
 sub bass {
   my $self = shift;
   return $self->toNote($self->[$PITCH_IDX][0]);
+}
+
+sub bassPitch {
+  return $_[0]->bass()->pitch();
 }
 
 sub third {

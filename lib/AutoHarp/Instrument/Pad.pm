@@ -37,7 +37,7 @@ sub play {
   my $self    = shift;
   my $segment = shift;
 
-  $self->{$OCTAVE} ||= pickOne(3,4);
+  $self->{$OCTAVE} ||= 4; #3 sounded like ass pickOne(3,4);
   
   if ($segment->music->hasProgression()) {
     my $padding = AutoHarp::Events::Performance->new();

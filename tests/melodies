@@ -5,7 +5,6 @@ use_ok AutoHarp::MusicBox::Base;
 use_ok AutoHarp::Events::Melody;
 use_ok AutoHarp::Generator;
 use_ok AutoHarp::Events::Guide;
-use_ok AutoHarp::Arcana::Environment::Play;
 
 my $debug = $ENV{DEBUG};
 my $measuresOfFive = int(rand(3)) + 2;

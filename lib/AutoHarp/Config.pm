@@ -85,6 +85,18 @@ sub Play {
   return;
 }
 
+sub PlayOpus {
+  my $opus = shift;
+  my $player = Player();
+  if ($player) {
+    my $tmp = $ENV{TEMP} || "/tmp"; 
+    $tmp .= "${DS}ah.midi";
+    $opus->write_to_file($tmp);
+    return !system("$player $tmp");
+  }
+  return;
+}
+
 sub _fromConfig {
   my $key = shift;
 

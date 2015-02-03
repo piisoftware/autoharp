@@ -5,6 +5,7 @@ use strict;
 use AutoHarp::Constants;
 use AutoHarp::Scale;
 use AutoHarp::Clock;
+use AutoHarp::Genre;
 use AutoHarp::Event::Text;
 use Carp;
 
