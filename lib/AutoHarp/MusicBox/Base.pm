@@ -63,9 +63,9 @@ sub fromDataStructure {
 }
 
 sub toDataStructure {
-  my $self = shift;
+  my $self  = shift;
   my $guide = $self->guide();
-  my $ret   = [$guide->toDataStructure()->[0]];
+  my $ret   = [$guide->toString()];
   if (!$self->hasProgression()) {
     if ($self->hasMelody()) {
       #need a chord progression to properly construct & reclaim a musical base
@@ -563,7 +563,7 @@ sub setScalesFromProgression {
 
 sub toString {
   my $self = shift;
-  my $str  = sprintf("guide==>\n\t%s\n",join("; ",@{$self->guide->toDataStructure()}));
+  my $str  = sprintf("guide==>\n\t%s\n",$self->guide->toString());
   
   foreach my $m (@{$self->music()}) {
     $str .= sprintf("%s==>\n\t%s\n",$m->type,$m->toString($self->guide));

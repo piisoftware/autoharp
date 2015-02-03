@@ -93,6 +93,15 @@ sub fromDataStructure {
   return $self;
 }
 
+#one header to rule them all 
+sub toString {
+  my $self = shift;
+  return AutoHarp::Notation::CreateHeader($ATTR_CLOCK => $self->clock(),
+					  $ATTR_SCALE => $self->scale(),
+					  $ATTR_GENRE => $self->genre(),
+					 );
+}
+
 #guide's data structure is an array of Notation Headers
 sub toDataStructure {
   my $self = shift;
@@ -113,7 +122,9 @@ sub toDataStructure {
   }
   #whatever t's value is now is the end marker event
   push(@$ds, AutoHarp::Notation::CreateHeader($ATTR_START_TIME => $t,
-					      $ATTR_CLOCK => $self->clockAtEnd()
+					      $ATTR_CLOCK => $self->clockAtEnd(),
+					      $ATTR_SCALE => $self->scaleAtEnd(),
+					      $ATTR_GENRE => $self->genre()
 					     ));
   return $ds;
 }

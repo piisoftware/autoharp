@@ -196,7 +196,13 @@ if ($band->{$DRUM_LOOP}) {
 }
 print "Midi file is $midiOut\n";
 eval {
-  my $outData = {$ATTR_MUSIC => {map {$_ => $music->{$_}->toDataStructure()} keys %$music},
+  my $m = {};
+  while (my ($t,$obj) = each %$music) {
+    #had this as a map statement and it was returning null keys 
+    #for no reason I could discern
+    $m->{$t} = $obj->toDataStructure();
+  }
+  my $outData ={ $ATTR_MUSIC => $m,,
 		 $ATTR_HOOK => $hook->toDataStructure(),
 		 $ATTR_INSTRUMENTS => [
 				       map {$_->toString()} 
