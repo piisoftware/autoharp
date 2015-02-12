@@ -64,9 +64,9 @@ sub fromFile {
       if ($eo->isMusicGuide()) {
 	push(@$guideEvents,$eo);
       } elsif ($eo->isMusic()) {
+	$endTime = $eo->reach if ($eo->reach > $endTime);
 	push(@$track,$eo);
       }
-      $endTime = $eo->reach if ($eo->reach > $endTime);
     }
     push(@$tracks,$track) if (scalar @$track);
   }

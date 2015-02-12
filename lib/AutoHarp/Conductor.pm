@@ -86,6 +86,8 @@ sub conductSegment {
   #if they are already registered as players, get their plays
   #otherwise, get their initial decision for this segment
   if ($segment->hasPlayers()) {
+    #re-zero the drummer's decision
+    $drummerDecision = 0;
     foreach my $i (@{$segment->players()}) {
       my $inst = $instMap->{$i};
       if (!$inst) {
@@ -276,6 +278,7 @@ sub buildSongSegments {
     $firstSegment->transitionIn($prevTrans);
     $firstSegment->transitionOut($compElement->transition());
     $firstSegment->music($segMusic);
+
     $firstSegment->hook($hook);
     if ($compElement->hasFirstHalfPerformers) {
       #note who's going to play if it's already been decided

@@ -174,21 +174,6 @@ sub eventCanBeAdded {
   return 1;
 }
 
-#time routine(s) for Music Guides round to the nearest measure
-#so as to keep everything "square" 
-#for some definition of square
-sub time {
-  my $self = shift;
-  my $arg = shift;
-  my $time;
-  if (length($arg)) {
-    $time = $self->SUPER::time($self->clockAt($arg)->nearestMeasure($arg));
-  } else {
-    $time = $self->SUPER::time();
-  }
-  return $time;
-}
-
 sub soundingTime {
   return $_[0]->time();
 }

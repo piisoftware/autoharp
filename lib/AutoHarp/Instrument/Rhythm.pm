@@ -222,12 +222,15 @@ sub buildLoop {
     $soundingUntil = $time + $duration;
 
     if ($soundingUntil > $segment->reach() + $NOTE_MINIMUM_TICKS) {
-      confess sprintf("(%d, %d, %d => %d, %d) IT WAS RIGHT HERE, BITCH",
+      confess sprintf("Rhythm overshot the end of the segment.\nPattern len: %d\nnote duration: %d\nnote going from %d to %d\nsegment %d to %d,chose lesser of %d and %d\n",
 		      $pattern, 
 		      $duration, 
 		      $time,
 		      $soundingUntil,
-		      ($next) ? $next->time : 0);
+		      $segment->time(),
+		      $segment->reach(),
+		      $toNextBeat,
+		      $toNextNote);
     }
     my $notes = [];
     #start with all the notes in the chord. 

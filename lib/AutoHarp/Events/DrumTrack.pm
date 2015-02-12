@@ -15,20 +15,23 @@ sub fromFile {
   my $file   = shift;
   my $tracks = $class->SUPER::fromFile($file);
   my $guide  = shift(@$tracks);
-  my @drumTracks = grep {$_->channel eq $PERCUSSION_CHANNEL} @$tracks;
   if (!$guide || 
       !$guide->duration ||
-      !scalar @drumTracks
+      !scalar @$tracks
      )  {
     confess "$file produced no valid drum tracks";
   }
-  #TODO: maybe one day handle more than one?
-  my $track = shift(@drumTracks);
-  #re-bless this guy into our fold
-  bless $track,$class;
-  #lengthen out hits to our drum resolution
-  foreach my $h (grep {$_->isPercussion()} @{$track->notes()}) {
-    $h->duration($DRUM_RESOLUTION);
+  my $track = $class->new();
+  $track->time($guide->time);
+  foreach my $t (@$tracks) {
+    #lengthen out hits to our drum resolution
+    foreach my $h (@$t) {
+      if ($h->isPercussion()) {
+	$h->duration($DRUM_RESOLUTION);
+      }
+      #add them to this track, provided they don't collide
+      $track->add($h);
+    }
   }
   #filter out blankness in the front, 
   #and move the zero of this track to the correct place
@@ -51,6 +54,8 @@ sub fromFile {
   if (!$guide->duration || !$track->duration) {
     confess "Yeah, that didn't work";
   }
+  #reset the end of the guide, in case we stripped some events off in the process
+  $guide->setEnd($track->reach);
   return [$guide,$track];
 }
 
@@ -135,7 +140,7 @@ sub prune {
 
   for (my $i = 0; $i < scalar @$self; $i++) {
     my $n = $self->[$i];
-    if ($n->isMusic() &&
+    if ($n->isPercussion() && 
 	$n->time >= $when && 
 	scalar grep {$n->drum =~ /$_/i} @$what) {
       push(@$pruned,$n->clone());
@@ -181,7 +186,7 @@ sub pruneExcept {
 
   for (my $i = 0; $i < scalar @$self; $i++) {
     my $n = $self->[$i];
-    if ($n->isMusic() &&
+    if ($n->isPercussion() && 
 	$n->time >= $when && 
 	!scalar grep {$n->drum =~ /$_/i} @$what) {
       push(@$pruned,$n->clone());

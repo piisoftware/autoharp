@@ -13,6 +13,7 @@ use strict;
 my $testCount = 5;
 
 my $lead  = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $LEAD_INSTRUMENT);
+my $loop  = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $DRUM_LOOP);
 my $accidentalPct = {};
 
 for (1..4) {
@@ -46,7 +47,8 @@ for (1..4) {
   $testCount++;
   my $follow    = ($theme->is('harmonizer')) || sometimes;
   my $leadPlay  = $lead->play($segment);
-  my $themePlay = $theme->play($segment,($follow) ? $leadPlay : undef);
+  my $drumPlay  = $loop->play($segment);
+  my $themePlay = $theme->play($segment,($follow) ? $leadPlay : $drumPlay);
 
   foreach my $d ({thing => 'Lead', play => $leadPlay},
 		 {thing => 'Theme', play => $themePlay}) {

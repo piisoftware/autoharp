@@ -23,6 +23,15 @@ foreach my $t (@$tracks) {
 }
 my $scale    = $guide->scale();
 my $newScale = $scale->newScaleFromHalfSteps($amount);
+my $newKey  = $newScale->key();
+$newKey =~ s/\W//g;
+my $newName = $file;
+if ($newName =~ /(\.\w+)$/) {
+  $newName =~ s/(\.\w+)$/$newKey$1/;
+} else {
+  $newName .= $newKey;
+}
+
 $guide->setScale($newScale,0);
 
 foreach my $e (grep {$_->time > 0 && $_->isScale()} @$guide) {
@@ -32,14 +41,6 @@ foreach my $e (grep {$_->time > 0 && $_->isScale()} @$guide) {
     #replace the guts of e with the guts of newMidi
     $e->[$i] = $newMidi->[$i];
   }
-}
-my $newKey  = $newScale->key();
-$newKey =~ s/\W//g;
-my $newName = $file;
-if ($newName =~ /(\.\w+)$/) {
-  $newName =~ s/(\.\w+)$/$newKey$1/;
-} else {
-  $newName .= $newKey;
 }
 
 my $newOpus = MIDI::Opus->new({format => 1,

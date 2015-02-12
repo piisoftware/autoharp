@@ -231,10 +231,23 @@ sub chords {
 sub chordAt {
   my $self = shift;
   my $time = shift;
-  foreach (grep {$_->isChord} @$self) {
-    return $_->clone() if ($time >= $_->time && $time < $_->reach);
+  my $chords = $self->chords();
+  if ($time <= $self->time()) {
+    return $chords->[0];
+  } elsif ($time >= $self->reach()) {
+    return $chords->[-1];
   }
-  return;
+
+  #we sometimes lie to you about what chord you're in
+  #if you're obviously on your way to a next chord, 
+  #we'll give you that instead
+  my $leeway = $NOTE_MINIMUM_TICKS / 2;
+  my @possibles = grep {$time < $_->reach() && $time > ($_->time - $leeway)} @$chords;
+  if (scalar @possibles > 1) {
+    #yep... 
+    return $possibles[1];
+  }
+  return $possibles[0];
 }
 
 sub chordsInInterval {

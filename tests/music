@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use Test::More tests => 24; 
+use Test::More tests => 23; 
 use_ok AutoHarp::MusicBox::Base;
 use_ok AutoHarp::Generator;
 use_ok AutoHarp::Clock;
@@ -21,13 +21,10 @@ $fromMelody->setMeasures($measures);
 $fromMelody->melody($music->melody);
 $fromMelody->time($randomTime);
 my $mDur = $melody->duration();
-my $nearestBegin = $clock->nearestMeasure($randomTime);
-$clock->time($nearestBegin);
-is($fromMelody->time, $nearestBegin, "Music correctly rounds $randomTime to $nearestBegin");
-is($fromMelody->melody->time, $nearestBegin, "Music correctly rounds the start of the melody that created it to $nearestBegin");
+is($fromMelody->melody->time, $randomTime, "Music correctly sets the start of the melody that created it to $randomTime");
 $music->melody->time(0);
 is($melody->time, 0, "Unfucking the music's melody unfucks the time of the reference to that melody");
-is($fromMelody->time, $nearestBegin, "...but it doesn't alter the music that was created from it");
+is($fromMelody->time, $randomTime, "...but it doesn't alter the music that was created from it");
 $generator->harmonize($fromMelody);
 ok($fromMelody->hasProgression(), "Harmonizing the from melody gives it a progression");
 

@@ -90,7 +90,8 @@ sub midi2genredata {
   my $guide = $tracks->[0];
   my $track = $tracks->[1];
   my $clock = $guide->clock();
-  my $newFile = AutoHarp::Config::GenreLoopFile($file);
+  my $origFile = $file;
+  my $newFile  = AutoHarp::Config::GenreLoopFile($file);
   while (-f $newFile) {
     my @cp  = split(/\./,$file);
     my $tag = pop(@cp) || "midi";
@@ -101,20 +102,20 @@ sub midi2genredata {
     $f++;
     $newFile = AutoHarp::Config::GenreLoopFile($file = "$f.$tag");
   }
-  if (File::Copy::syscopy("$directory${DS}$file",$newFile)) {
+  if (File::Copy::syscopy("$directory${DS}$origFile",$newFile)) {
     my $data    =  {
 		    $ATTR_BARS    => $guide->measures(),
 		    $ATTR_METER   => $guide->clock->meter(),
 		    $ATTR_TEMPO   => $guide->clock->tempo(),
 		    $ATTR_PATTERN => $track->toDataStructure($guide),
-		    $ATTR_FILE    => $file,
+		    $ATTR_FILE    => $file
 		   };
     print JSON->new()->pretty()->encode($data->{$ATTR_PATTERN});
     tagLoop($data,$track,$guide->clock,$directory,$file);
     return $data;
   } else {
     die "Couldn't copy file over into database! Check permissions on " .
-      AutoHarp::Config::GenreFileDirectory() . " and try again";
+      AutoHarp::Config::GenreFileRoot() . " and try again";
   }
 }
 
@@ -151,9 +152,9 @@ sub chooseGenre {
     printf "%2d) %s\n",$idx,$GenreList->[$idx - 1];
   }
   printf "%2d) New Genre\n",$idx;
-  printf "==> ";
   my $chosenGenre;
   while (1) {
+    printf "==> ";
     chomp(my $chosen = <STDIN>);
     if ($chosen > 0 && $chosen <= scalar @$GenreList + 1) {
       $chosenGenre = $GenreList->[$chosen - 1];

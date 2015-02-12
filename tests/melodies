@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use Test::More tests => 47; 
+use Test::More tests => 46; 
 use_ok AutoHarp::Constants;
 use_ok AutoHarp::MusicBox::Base;
 use_ok AutoHarp::Events::Melody;

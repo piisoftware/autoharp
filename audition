@@ -62,7 +62,11 @@ if ($part) {
 if (!$box) {
   die "Found nothing in $file to play\n";
 }
+while ($box->soundingTime < 0) {
+  $box->time($box->time + $box->clock->measureTime());
+}
 
+$box->dump();
 my $opus = MIDI::Opus->new( {
 			     format => 1,
 			     ticks => $TICKS_PER_BEAT,
