@@ -7,6 +7,8 @@ Hello there! This is AutoHarp. AutoHarp is a (somewhat) programmable music-gener
 
 This is by no means complete documentation of this software. That would span hundreds of pages and be woefully incomplete. In many cases I have no idea what the expected behavior of a particular thing is. Be a tinkerer. Try things out. 
 
+<a href="https://www.youtube.com/watch?v=YsVVEsuznd8">Here is a helpful video you can watch</a>. 
+
 This software is (c) 2015 by Paul Mariz/Pii Software.It is distributed under the GNU GPL-3.0 license (see LICENSE)--you may derive from this code but it must be released under the same license. This license also explicitly applies to all music generated: it is yours to do with as you will, so long as you credit the source (the AutoHarp program and its author(s)), and extend the same rights going forward (e.g. you agree to allow other musicians to sample your work). HOWEVER, this does not extend to already copyrighted material. <b>If you import copyrighted files or copyrighted melodies (or anything else carrying copyright) while using AutoHarp, it is your responsibility to fulfill any requirements with the copyright holder prior to publishing any derived music.</b> 
 
 This is version 0.1.5.
