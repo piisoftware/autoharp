@@ -41,7 +41,7 @@ Honest to God, I have no idea. It kind of just does. I wrote it and then A Mirac
 - It will probably ask you for the name of a musical genre under which to file each loop unless (PRO TIP again) your loops are sorted into directories named for the genre they belong in.   
     - Example: if your Hip Hop loops are in a directory called "hiphop" (case and spacing don’t matter) and the first time it asks you what genre they are you type "Hip Hop", it'll magically* sort the rest of them. 
     - You can also name the files (or subdirectories they’re in) with things like “verse”, “chorus”, “fill,” and the program will categorize them appropriately.
-- PRO TIP again, again: The more, and more varied, loops you import, the more interesting AutoHarp gets. Author and import your own! You will be extra cool. Note the warning about copyright above. Taking a copyrighted loop and importing it into this program does not make in un-copyrighted. Diddy will still sue you. 
+- PRO TIP again, again: The more, and more varied, loops you import, the more interesting AutoHarp gets. Author and import your own! You will be extra cool. Note the warning about copyright above. Taking a copyrighted loop and importing it into this program does not make it un-copyrighted. Diddy will still sue you. 
 <pre>*not actual magic</pre>
 
 <h3>OKAY, NOW LET'S MAKE SOME MUSIC</h3>
