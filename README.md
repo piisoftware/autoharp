@@ -7,7 +7,9 @@ Hello there! This is AutoHarp. AutoHarp is a (somewhat) programmable music-gener
 
 This is by no means complete documentation of this software. That would span hundreds of pages and be woefully incomplete. In many cases I have no idea what the expected behavior of a particular thing is. Be a tinkerer. Try things out. 
 
-This software is (c) 2015 by Paul Mariz/Pii Software.It is distributed under the GNU GPL-3.0 license (see LICENSE)--you may derive from this code but it must be released under the same license. This license also explicitly applies to all music generated: it is yours to do with as you will, so long as you credit the source (the AutoHarp program and its author(s)), and extend the same rights going forward (e.g. you agree to allow other musicians to sample your work). HOWEVER, this does not extend to already copyrighted material. <b>If you import copyrighted files or copyrighted melodies (or anything else carrying copyright) while using AutoHarp, it is your responsibility to fulfill any requirements with the copyright holder prior to publishing any derived music.</b> 
+<a href="https://www.youtube.com/watch?v=YsVVEsuznd8">Here is a helpful video you can watch</a>. 
+
+This software is (c) 2015 by Paul Mariz/Pii Software.It is distributed under the GNU GPL-3.0 license (see LICENSE)--you may derive from this code but it must be released under the same license. This license also explicitly applies to all music generated: it is yours to do with as you will, so long as you credit the source (the AutoHarp program and its author(s)), and extend the same rights going forward. HOWEVER, this does not extend to already copyrighted material. <b>If you import copyrighted files or copyrighted melodies (or anything else carrying copyright) while using AutoHarp, it is your responsibility to fulfill any requirements with the copyright holder prior to publishing any derived music.</b> 
 
 This is version 0.1.5.
 
@@ -39,7 +41,7 @@ Honest to God, I have no idea. It kind of just does. I wrote it and then A Mirac
 - It will probably ask you for the name of a musical genre under which to file each loop unless (PRO TIP again) your loops are sorted into directories named for the genre they belong in.   
     - Example: if your Hip Hop loops are in a directory called "hiphop" (case and spacing don’t matter) and the first time it asks you what genre they are you type "Hip Hop", it'll magically* sort the rest of them. 
     - You can also name the files (or subdirectories they’re in) with things like “verse”, “chorus”, “fill,” and the program will categorize them appropriately.
-- PRO TIP again, again: The more, and more varied, loops you import, the more interesting AutoHarp gets. Author and import your own! You will be extra cool. Note the warning about copyright above. Taking a copyrighted loop and importing it into this program does not make in un-copyrighted. Diddy will still sue you. 
+- PRO TIP again, again: The more, and more varied, loops you import, the more interesting AutoHarp gets. Author and import your own! You will be extra cool. Note the warning about copyright above. Taking a copyrighted loop and importing it into this program does not make it un-copyrighted. Diddy will still sue you. 
 <pre>*not actual magic</pre>
 
 <h3>OKAY, NOW LET'S MAKE SOME MUSIC</h3>
