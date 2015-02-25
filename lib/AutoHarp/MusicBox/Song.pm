@@ -235,7 +235,7 @@ sub scores {
   }
   printf "Done building scores.\n" if ($talk);
   my $scores = [values %$sHash];
-  push(@$scores, $self->guide);
+  unshift(@$scores, $self->guide);
   return $scores;
 }
 
