@@ -93,7 +93,7 @@ sub play {
       } 
     }
     my $td;
-    foreach my $o (grep {-f AutoHarp::Config::GenreLoopFile($_)} @options) {
+    foreach my $o (grep {-f AutoHarp::Config::GenreLoopFile($_->{pattern}{$ATTR_FILE})} @options) {
       #find the closest match.
       if (!$td || $td > $o->{tempoDiff}) {
 	$loop = $o->{pattern};

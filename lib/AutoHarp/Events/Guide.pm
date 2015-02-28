@@ -143,7 +143,7 @@ sub export {
 
 sub isEmpty {
   my $self = shift;
-  return ($self->[0]->time == $self->[-1]->time);
+  return ($self->[0]->time == $self->[-1]->time && !scalar grep {$_->isClock || $_->isTempo} @$self);
 }
 
 sub eventCanBeAdded {
