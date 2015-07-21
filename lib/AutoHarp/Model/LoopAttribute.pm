@@ -1,13 +1,13 @@
 package AutoHarp::Model::LoopAttribute;
 
-use AutoHarp::Model::Loop;
-
 use strict;
 use base qw(AutoHarp::Model);
 
-sub loop {
-  my $self = shift;
-  return AutoHarp::Model::Loop->load($self->loop_id);
+sub loadByAttributeValue {
+  my $class = shift;
+  my $attr = shift;
+  my $val = shift;
+  return $class->all({attribute => $attr, value => $val});
 }
 
 sub CreateTableCommands {

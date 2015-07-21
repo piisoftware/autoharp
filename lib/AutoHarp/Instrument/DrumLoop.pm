@@ -127,8 +127,10 @@ sub play {
       if ($pMeas > 1 && (!$segment->isSongBeginning || often)) {
 	$pTrack->time(0);
 	#cut this down to its last measure. Or 2.
-	$pMeas -= pickOne(1,1,1,2);
-	$pTrack = $pTrack->subMelody($pMeas * $clock->measureTime);
+	my $diff = pickOne(1,1,1,2);
+	$pTrack = $pTrack->subMelody(($pMeas - $diff) * $clock->measureTime);
+	#pTrack is now $diff measures long
+	$pMeas = $diff;
       }
       $pTrack->time($segment->time - ($pMeas * $clock->measureTime));
       $beat->add($pTrack);
@@ -307,9 +309,9 @@ sub findLoopBySegmentAndElement {
   my $self    = shift;
   my $segment = shift;
   my $element = shift;
-  my $eMap = {map {$_->loop_id => 1} @{AutoHarp::Model::LoopAttribute->all({$SONG_ELEMENT => $element})}};
+  my $eMap = {map {$_->loop_id => 1} @{AutoHarp::Model::LoopAttribute->loadByAttributeValue($SONG_ELEMENT, $element)}};
   my $loop    = $self->{$LOOPS}{$segment->musicTag};  
-
+  
   my @definites;
   my @maybes;
   my $attrs = {};

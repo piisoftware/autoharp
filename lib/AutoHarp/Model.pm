@@ -295,7 +295,7 @@ sub _select {
   while ($r = $s->fetchrow_hashref()) {
     push(@$rset,$r);
   }
-  if (!scalar @$rset && $!) {
+  if (!scalar @$rset && $statement =~ /element\s+\=/) {
     confess "FUCK YOU $statement";
   }
   return $rset;
