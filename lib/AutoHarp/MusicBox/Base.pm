@@ -11,7 +11,6 @@ use base qw(AutoHarp::MusicBox);
 use JSON;
 
 use strict;
-use vars qw($AUTOLOAD);
 
 #container for the various musics that we pass around (i.e. melody/progression)
 

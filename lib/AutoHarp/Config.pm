@@ -2,9 +2,9 @@ package AutoHarp::Config;
 
 use FindBin qw($Bin);
 use strict;
-
+my $HOME            = $ENV{HOME} || $ENV{HOMEPATH};
 my $DS              = ($^O =~ /MSWin/) ? chr(92) : "/";
-my $INI_FILE        = "$Bin${DS}.autoharp-config";
+my $INI_FILE        = "$HOME${DS}.autoharp-config";
 my $DB_ROOT         = $ENV{AUTOHARP_DB_ROOT} || "$Bin${DS}db";
 my $GENRE_DB_ROOT   = "$DB_ROOT${DS}genres";
 my $GENRE_FILE_ROOT = "$DB_ROOT${DS}loops";
@@ -44,6 +44,14 @@ sub GenreDBRoot {
   mkdir($DB_ROOT) if (!-d $DB_ROOT);
   mkdir($GENRE_DB_ROOT) if (!-d $GENRE_DB_ROOT);
   return $GENRE_DB_ROOT;
+}
+
+sub DBUser {
+  return _fromConfig('DBUSER');
+}
+
+sub DBPwd {
+  return _fromConfig('DBPASSWORD');
 }
 
 sub GenreFileRoot {

@@ -30,22 +30,15 @@ sub new {
       }
     }
   }
-  bless $self,$class;
   unshift(@$self,AutoHarp::Event->zeroEvent($time));
+  bless $self,$class;
   $self->sort();
   return $self;
 }
 
-sub fromFile {
+sub fromOpus {
   my $class = shift;
-  my $file  = shift;
-  my $opus;
-  eval {
-    $opus  = MIDI::Opus->new({'from_file' => $file});
-  };
-  if ($@ || !$opus) {
-    confess "Couldn't load a valid opus from $file: $@";
-  }
+  my $opus  = shift;
   my $ticks = $opus->ticks();
   my $tracks = [];
   my $guideEvents = [];
@@ -80,6 +73,19 @@ sub fromFile {
   return $retTracks;
 }
 
+sub fromFile {
+  my $class = shift;
+  my $file  = shift;
+  my $opus;
+  eval {
+    $opus  = MIDI::Opus->new({'from_file' => $file});
+  };
+  if ($@ || !$opus) {
+    confess "Couldn't load a valid opus from $file: $@";
+  }
+  return $class->fromOpus($opus);
+}
+
 sub fromArrayOfEvents {
   my $class  = shift;
   my $events = shift;
@@ -103,6 +109,35 @@ sub fromScoreEvents {
   my $class     = shift;
   my $events    = shift;
   return $class->new($events);
+}
+
+sub fromTextFile {
+  my $class = shift;
+  my $file = shift;
+  open(FILE, "$file") or die "Couldn't read $file: $!";
+  my $events = [];
+  while(<FILE>) {
+    chomp($_);
+    eval {
+      push(@$events, AutoHarp::Event->fromTextLine($_));
+    };
+  }
+  close(FILE);
+  return $class->fromArrayOfEvents($events);
+}
+
+sub toTextFile {
+  my $self     = shift;
+  my $fileName = shift;
+  if (!$fileName || !open(FILE, ">$fileName")) {
+    die "Can't open $fileName for writing: $!";
+  }
+  foreach my $e (@$self) {
+    print FILE $e->toTextLine();
+    print FILE "\n";
+  }
+  close(FILE);
+  return 1;
 }
 
 sub type {
@@ -511,12 +546,14 @@ sub channel {
   my $arg = shift;
   if (length($arg)) {
     grep {$_->channel($arg)} @$self;
+    return $arg;
   }
-  return (scalar @$self) ? $self->[0]->channel() : 0;
+  my @c = grep {$_->isMusic()} @$self;
+  return (scalar @c) ? $c[0]->channel() : 0;
 }
 
-sub isDrumTrack {
-  return;
+sub isPercussion {
+  return ($_[0]->channel() eq $PERCUSSION_CHANNEL);
 }
 
 #generate a relatively idempotent id for this event list

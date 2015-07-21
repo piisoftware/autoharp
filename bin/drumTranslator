@@ -1,0 +1,52 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Events::DrumTrack;
+use AutoHarp::MusicBox::Base; 
+use AutoHarp::Constants;
+use AutoHarp::Config;
+use AutoHarp::Genre;
+use File::Copy;
+use MIDI;
+use JSON;
+
+my $resultDir = $ARGV[0];
+if ($resultDir && -d $resultDir) {
+  #do something, then exit
+  exit(0);
+}
+
+my $outputDir = "$ENV{HOME}/rnn";
+if (!-d $outputDir) {
+  mkdir($outputDir);
+}
+
+foreach my $Genre (@{AutoHarp::Genre::Genres()}) {
+  foreach my $pattern (@{$Genre->getPatterns}) {
+    my $file = $pattern->{$ATTR_FILE};
+    my $loop;
+    eval {
+      $loop = AutoHarp::Events::DrumTrack->fromFile($file);
+    };
+    if ($@ || !$loop) {
+      print "Skipping $pattern->{$ATTR_FILE}, got no loop: $@\n";
+      next;
+    }
+    my $clock    = AutoHarp::Clock->new(%$pattern);
+    my $base     = AutoHarp::MusicBox::Base->new($ATTR_CLOCK => $clock);
+    my $measures = $loop->measures($clock);
+    $base->measures($measures);
+    $base->melody($loop);
+    $base->measures(4);
+    my $fileName = $file;
+    $fileName =~ s/\W//g;
+    if (-e "$outputDir/$fileName") {
+      die "DAMMIT: $fileName";
+    }
+    $base->melody->toTextFile("$outputDir/$fileName");
+  }
+}
+
+exit(0);

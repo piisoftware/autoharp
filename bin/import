@@ -1,0 +1,277 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Model::Loop;
+use AutoHarp::Model::Genre;
+use AutoHarp::Constants;
+use AutoHarp::Config;
+use Data::Dumper;
+use JSON;
+
+my $StartDir = $ARGV[0] || ".";
+my $Interactive = $ARGV[1];
+
+my $DS  = ($^O =~ /MSWin/) ? chr(92) : "/";
+my $GenreList = AutoHarp::Model::Genre->all();
+my $GenreMemo  = {};
+my $AttrMemo   = {};
+my $IgnoreMemo = {};
+
+my $didFile = "$StartDir/.autoharpDidImport";
+my $IsRepeat = (-f $didFile);
+
+#pre-populate the memos
+foreach my $a (@{AutoHarp::Model::LoopAttribute->all()}) {
+  $AttrMemo->{$a->value}{$a->attribute} = $a->value;
+}
+
+my $Translations = {'R&B' => ['RB','RnB']};
+my $SongElements = [
+		    $SONG_ELEMENT_BRIDGE,
+		    $SONG_ELEMENT_CHORUS,
+		    $SONG_ELEMENT_FILL,
+		    $SONG_ELEMENT_INSTRUMENTAL,
+		    $SONG_ELEMENT_INTRO,
+		    $SONG_ELEMENT_LEADIN,
+		    $SONG_ELEMENT_OUTRO,
+		    $SONG_ELEMENT_PRECHORUS,
+		    $SONG_ELEMENT_SOLO,
+		    $SONG_ELEMENT_VERSE
+		   ];
+
+recProc($StartDir);
+exit(system("touch $didFile"));
+
+sub recProc {
+  my $dir       = shift;
+  if (opendir(D,$dir)) {
+    foreach my $i (grep {/\w/} readdir(D)) {
+      my $target = "$dir${DS}$i";
+      if (-d $target) {
+	recProc($target);
+      } elsif ($i =~ /\.mid/) {
+	my $loop = AutoHarp::Model::Loop->fromFile($target,1);
+	if (!$loop) {
+	  print "Couldn't find a valid loop in $target, skipping...\n";
+	  next;
+	}
+	if ($loop->bars() == 1 && 
+	    (scalar grep {$_->isMusic()} @{$loop->track(1)->events}) <= 1) {
+	  print "$target seems to be a single note, skipping...\n";
+	  return;
+	}
+	my $exists = AutoHarp::Model::Loop->loadBy({midi => $loop->midi,
+						    type => $loop->type});
+	if ($exists->isEmpty()) {
+	  $loop->save();
+	  printf "Added %d bar loop of type %s from %s\n",
+	    $loop->bars,
+	      $loop->type,
+		$target;
+	} else {
+	  $loop = $exists;
+	  print "Found clone of $target, using and adding new tags...\n";
+	}
+	$loop->addAttribute($ATTR_FILE, ($i =~ /(.+)\.mid/)[0]);
+	findGenresAndAttributes($loop,$target);
+	foreach my $a (@{$loop->getAttributes()}) {
+	  printf "\ttagged loop %-8s => %s\n",$a->attribute(),$a->value();
+	}
+	foreach my $g (@{$loop->genres}) {
+	  print "\tadded to genre " . $g->name . "\n";
+	}
+      } else {
+	print "Ignoring file $target (non-midi)\n";
+      }
+    }
+    closedir(D);
+  } else {
+    die "FAILED TO OPEN $dir: $!\n";
+  }
+}
+      
+sub findGenresAndAttributes {
+  my $loop = shift;
+  my $target = shift;
+  my @start = grep {/\w/} split($DS,$StartDir);
+  my @levels = grep {/\w/} split($DS,$target);
+  for (1..(scalar @start - 1)) {
+    #only process things at or below the start directory
+    shift(@levels);
+  }
+
+  for(my $i = 0; $i < scalar @levels; $i++) {
+    my $d = $levels[$i];
+    my $isPenultimate = ($i == ($#levels - 1));
+    my $isFile = 0;
+    my $added = 0;
+    if ($IgnoreMemo->{$d}) {
+      next;
+    }
+    if ($d =~ /\.mid/) {
+      $d = ($d =~ /(.+)\.mid/)[0]; 
+      $isFile = 1;
+    }
+    if ($GenreMemo->{$d}) {
+      if (scalar @{$GenreMemo->{$d}}) {
+	foreach my $g (@{$GenreMemo->{$d}}) {
+	  $loop->addToGenre($g);
+	  $added++;
+	}
+      } 
+    } else {
+      foreach my $genre (@$GenreList) {
+	my $gName = $genre->name();
+	if ($d =~ /$gName/i) {
+	  $loop->addToGenre($genre);
+	  $added++;
+	} elsif ($Translations->{$gName}) {
+	  foreach my $t (@{$Translations->{$gName}}) {
+	    if ($d =~ /$t/) {
+	      $loop->addToGenre($genre);
+	      $added++;
+	      last;
+	    }
+	  }
+	}
+      }
+    }
+    if ($AttrMemo->{$d}) {
+      while (my ($k,$v) = each %{$AttrMemo->{$d}}) {
+	$loop->addAttribute($k => $v);
+	$added++;
+      }
+    } elsif ($d =~ /$ATTR_SONG/i || $isPenultimate) {
+      #particular song classification
+      $loop->addAttribute($ATTR_SONG,$d);
+      $added++;
+    } else {
+      foreach my $elt (@$SongElements) {
+	if ($d =~ /$elt/i) {
+	  $loop->addAttribute($SONG_ELEMENT,$elt);
+	  $added++;
+	}
+      }
+    }
+
+    if (!$added || $isFile) {
+      #as a last ditch, go through existing memo and see if anything matches
+      foreach my $key (keys %$AttrMemo) {
+	while (my ($attr, $val) = each %{$AttrMemo->{$key}}) {
+	  if ($d =~ /$val/i && $attr ne $ATTR_FILE) {
+	    #found an existing match. Probably good
+	    $AttrMemo->{$d}{$attr} = $val if (!$isFile);
+	    $loop->addAttribute($attr,$val);
+	    $added++;
+	  }
+	}
+      }
+    }
+     
+    if (!$added && !$IsRepeat && !$isFile) {
+      #still nothin', and we haven't been here before
+      if ($Interactive) {
+	#the user has allowed us to ask him or her
+	createTags($loop, $d);
+      } else {
+	#we don't recognize this as anything, make it a bucket 
+	$loop->addAttribute($ATTR_BUCKET, $d);
+      }
+    }
+  }
+}
+
+sub createTags {
+  my $loop = shift;
+  my $dir  = shift;
+  print "I don't recognize:\n$dir\n";
+  {
+    print "(g)enres, (b)ucket, (s)ong, (a)ttribute, (i)gnore==> ";
+    my $c = (<STDIN> =~ /^([gbsai])/i)[0];
+    if (!$c) {
+      print "NO. Try again.\n";
+      redo;
+    }
+    for ($c) {
+      /^g/i && learnGenres($loop,$dir);
+      /^b/i && do {
+	$AttrMemo->{$dir}{$ATTR_BUCKET} = $dir;
+	$loop->addAttribute($ATTR_BUCKET, $dir);
+      };
+      /^s/i && do {
+	$AttrMemo->{$dir}{$ATTR_SONG} = $dir;
+	$loop->addAttribute($ATTR_SONG, $dir);
+      };
+      /^i/i && do {
+	$IgnoreMemo->{$dir} = 1;
+      };
+      /^a/i && learnAttributes($loop,$dir);
+    }
+  }
+}
+
+sub learnGenres {
+  my $loop = shift;
+  my $dir  = shift;
+  my $needReload = 0;
+  $GenreMemo->{$dir} = [];
+  while(1) {
+    print "add to genre (enter when done)==> ";
+    chomp(my $newName = <STDIN>);
+    if (!$newName) {
+      last;
+    } 
+    my $existingGenre = AutoHarp::Model::Genre::ValidGenre($newName);
+    if (!$existingGenre) {
+      print "Create genre $newName? ";
+      my $ans = <STDIN>;
+      next if ($ans !~ /^y/i);
+      print "Creating...\n";
+      $needReload = 1;
+    }
+    my $genre = AutoHarp::Model::Genre->loadOrCreate({name => $existingGenre || $newName});
+    $genre->save();
+    $loop->addToGenre($genre);
+    printf "\tAdded to genre %s\n",$genre->name();
+    push(@{$GenreMemo->{$dir}},$genre);
+  }
+  if ($needReload) {
+    $GenreList = AutoHarp::Model::Genre->all();
+  }
+  return scalar @{$GenreMemo->{$dir}};
+}
+
+
+sub learnAttributes {
+  my $loop = shift;
+  my $dir  = shift;
+  while(1) {
+    print "attribute name (enter when done)==> ";
+    chomp(my $attr = <STDIN>);
+    if (!$attr) {
+      last;
+    } 
+    my $existingName = AutoHarp::Model::LoopAttribute->loadBy({attribute => $attr});
+    if ($existingName->isEmpty()) {
+      print "Create attribute $attr? ";
+      my $ans = <STDIN>;
+      if ($ans !~ /^y/i) {
+	print "Skipping...\n";
+	next;
+      }
+    }
+    
+    print "attribute value (enter to accept '$dir')==> ";
+    chomp(my $val = <STDIN>);
+    $val ||= $dir;
+    
+    print "Tag loop $attr => $val (y)? ";
+    my $ans = <STDIN>;
+    next if ($ans =~ /^n/i);
+    
+    $loop->addAttribute($attr,$val);
+    $AttrMemo->{$dir}{$attr} = $val;
+  }
+}

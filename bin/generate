@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 use FindBin qw($Bin);
-use lib "$Bin/lib";
+use lib "$Bin/../lib";
 
 use AutoHarp::Generator;
 use AutoHarp::Events::Guide;
@@ -8,7 +8,7 @@ use AutoHarp::Instrument;
 use AutoHarp::Constants;
 use AutoHarp::Conductor;
 use AutoHarp::Composer;
-use AutoHarp::Genre;
+use AutoHarp::Model::Genre;
 use AutoHarp::Clock;
 use AutoHarp::Scale;
 use AutoHarp::Fuzzy;
@@ -20,15 +20,17 @@ use JSON;
 use strict;
 
 my $genreName = join(" ",@ARGV);
-while (!$genreName) {
-  $genreName = pickOne(AutoHarp::Genre::Genres());
-  if (!$genreName) {
-    die "Cannot find any genres!";
+my $genre;
+my $all = AutoHarp::Model::Genre->all();
+if ($genreName) {
+  $genre = (grep {$_->name eq $genreName} @$all)[0];
+  if (!$genre) {
+    print "$genreName is an invalid genre. Known genres:\n";
+    print join("\n",map {$_->name} @$all);
+    exit(0);
   }
-  if ($genreName eq 'Metal' || $genreName eq 'Punk') {
-    #Fuck you, Punk. Fuck you, Metal
-    undef $genreName;
-  }
+} else {
+  $genreName = "Ex Machina";
 }
 
 my $fName = "$genreName-" . time();
@@ -57,8 +59,7 @@ foreach my $i (@INSTS) {
   $band->{$uid} = $inst;
 }
 
-my $genre = AutoHarp::Genre->new($genreName);
-my $clock = $genre->suggestClock();
+my $clock = chooseClock($genre);
 my $scale = chooseScale();
 my $bars  = 8;
 my $guide = AutoHarp::Events::Guide->fromAttributes($ATTR_BARS => $bars,
@@ -158,6 +159,16 @@ if (lc($sName) eq 'x') {
   }
 }
 exit(0);
+
+sub chooseClock {
+  my $genre = shift;
+  if ($genre) {
+    return $genre->suggestClock();
+  }
+  my $loop = pickOne(AutoHarp::Model::Loop->all({type => $DRUM_LOOP}));
+  return AutoHarp::Clock->new($ATTR_METER => $loop->meter,
+			      $ATTR_TEMPO => $loop->tempo);
+}
 
 sub chooseScale {
   my $seed = int(rand() * 100);

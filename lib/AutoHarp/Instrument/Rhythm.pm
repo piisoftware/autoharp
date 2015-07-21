@@ -116,7 +116,7 @@ sub buildLoop {
   my $music            = $segment->music();
   my $progression      = $segment->music->progression;
   my $genreName        = ($segment->genre()) ? 
-    $segment->genre()->name : 'Craptacularity';
+    $segment->genre()->name : 'Ex Machina';
   
   my $loop = AutoHarp::Events::Performance->new();
   $loop->time($segment->time());

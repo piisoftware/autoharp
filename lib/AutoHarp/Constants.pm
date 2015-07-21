@@ -6,6 +6,7 @@ use Readonly;
 @EXPORT = qw(
 	      $AH_CLASS
 	      $ATTR_BARS
+	      $ATTR_BUCKET
 	      $ATTR_CHANNEL
 	      $ATTR_CLOCK
 	      $ATTR_COMPOSER
@@ -25,6 +26,7 @@ use Readonly;
 	      $ATTR_INSTRUMENT_ROLE
 	      $ATTR_INTERVALS
 	      $ATTR_KEY
+	      $ATTR_LOOP_TYPE
 	      $ATTR_MELODY
 	      $ATTR_METER
 	      $ATTR_MIDI_FILE
@@ -114,12 +116,11 @@ use Readonly;
 	      $SONG_ELEMENT_INSTRUMENTAL
 	      $SONG_ELEMENT_INTRO
 	      $SONG_ELEMENT_LEADIN
+	      $SONG_ELEMENT_LEADOUT
 	      $SONG_ELEMENT_OUTRO
 	      $SONG_ELEMENT_PRECHORUS
 	      $SONG_ELEMENT_SOLO
 	      $SONG_ELEMENT_TRANSITION
-	      $SONG_ELEMENT_LEADIN
-	      $SONG_ELEMENT_LEADOUT
 	      $SONG_ELEMENT_VERSE
 	      $SONG_SECTION
 	      $SONG_SEGMENT
@@ -163,8 +164,10 @@ Readonly::Scalar $NOTE_MINIMUM_TICKS       => $TICKS_PER_BEAT / 4; #16th in 4/4
 
 Readonly::Scalar $ATTR_BARS                => 'bars';
 Readonly::Scalar $BASS_INSTRUMENT          => 'bass';
+Readonly::Scalar $ATTR_BUCKET              => 'bucket';
 Readonly::Scalar $ATTR_CHANNEL             => 'channel';
 Readonly::Scalar $ATTR_CLOCK               => 'clock';
+Readonly::Scalar $ATTR_LOOP_TYPE           => 'loop_type';
 Readonly::Scalar $THEME_INSTRUMENT         => 'theme';
 Readonly::Scalar $ATTR_COMPOSER            => 'composer';
 Readonly::Scalar $ATTR_COMPOSITION         => 'composition';

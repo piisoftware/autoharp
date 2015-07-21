@@ -19,6 +19,12 @@ sub new {
   return bless $args, $class;
 }
 
+sub hashArgs {
+  my $self = shift;
+  my $first = $_[0];
+  return (ref($first) eq 'HASH') ? $first : {@_};
+}
+
 sub requireClass {
   my $class = shift;
   my $mod   = $class;

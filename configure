@@ -23,7 +23,9 @@ my @MODLIST = qw(FindBin
 		 NEXT
 		 Scalar::Util
 		 Class::Load
-		 Readonly);
+		 Readonly
+		 IO::String
+	       );
 
 my $HOME = $ENV{HOME} || $ENV{HOMEPATH};
 

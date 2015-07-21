@@ -245,7 +245,7 @@ sub followPlay {
   
   my $music    = $segment->music();
 
-  if ($toFollow->isDrumTrack()) {
+  if ($toFollow->isPercussion()) {
     #pick a drum and follow that
     my $opts = $toFollow->split();
     #prefer one with a lot of notes--we may filter out some in a minute

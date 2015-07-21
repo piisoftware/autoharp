@@ -1,0 +1,50 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Model;
+
+my @TABLES = qw(Loop
+		Genre
+		LoopGenre
+		LoopAttribute);
+
+foreach my $t (@TABLES) {
+  require "AutoHarp/Model/$t.pm";
+  "AutoHarp::Model::$t"->Install();
+}
+
+#any seeding that needs to be done
+my @StartGenres = ('Country',
+		   'Metal',
+		   'Rock',
+		   'Electronic',
+		   'Big Easy',
+		   'Funk',
+		   'Hip Hop',
+		   'R&B',
+		   'Prog',
+		   'Blues',
+		   'Fusion',
+		   'Punk',
+		   'Twisted',
+		   'Breakbeat',
+		   'Jazz',
+		   'World',
+		   'Abbey Road',
+		   '60s',
+		   '70s',
+		   '80s',
+		   'Alternative',
+		   'Indie',
+		   'Disco'
+		  );
+
+foreach my $g (@StartGenres) {
+  my $Genre = AutoHarp::Model::Genre->loadOrCreate({name => $g});
+  $Genre->description("A $g-ish musical genre") if (!$Genre->description());
+  $Genre->save();
+}
+
+exit(0);

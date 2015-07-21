@@ -83,6 +83,18 @@ sub eventEnd {
   return AutoHarp::Event::Marker->new($EVENT_END, $time);
 }
 
+#translate self to a line of text separated by commas
+sub toTextLine {
+  my $self = shift;
+  return join(",",@$self);
+}
+
+sub fromTextLine {
+  my $class = shift;
+  my $line = shift;
+  return $class->new([split(",",$line)]);
+}
+
 sub __validEvent {
   my $e = shift;
   return (scalar grep {$e eq $_} @VALID_EVENTS);
@@ -189,7 +201,7 @@ sub isNameEvent {
   my $self = shift;
   return ($self->type eq $EVENT_TRACK_NAME || $self->type eq $EVENT_INSTRUMENT_NAME);
 }
-
+  
 sub time {
   my $self = shift;
   my $arg  = shift;

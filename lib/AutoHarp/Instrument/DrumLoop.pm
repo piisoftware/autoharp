@@ -8,15 +8,23 @@ use AutoHarp::Fuzzy;
 use AutoHarp::Constants;
 use AutoHarp::Events::DrumTrack;
 use AutoHarp::Notation;
-use AutoHarp::Genre;
+use AutoHarp::Model::Genre;
+use AutoHarp::Model::Loop;
 
 use Carp;
 use Data::Dumper;
 
 use base qw(AutoHarp::Instrument);
 
-my $PATTERNS = 'patterns';
-my $TALK = !$ENV{AUTOHARP_QUIET};
+my $LOOPS = 'loops';
+
+#Total swags, based on nothing. TODO: TUNE THIS.
+my $GENRE_WEIGHT            = 5;
+my $TEMPO_WEIGHT            = 10;
+my $BUCKET_WEIGHT           = 3;
+my $SONG_AFFILIATION_WEIGHT = 20;
+my $SONG_ELEMENT_WEIGHT     = 20;
+my $FILL_WEIGHT             = -25;
 
 sub choosePatch {
   my $self = shift;
@@ -33,7 +41,7 @@ sub isDrums {
 
 sub reset {
   my $self = shift;
-  delete $self->{$PATTERNS};
+  delete $self->{$LOOPS};
 }
 
 sub playDecision {
@@ -55,7 +63,7 @@ sub playDecision {
 sub patterns {
   my $self = shift;
   my $ret = [];
-  while (my ($t,$td) = each %{$self->{$PATTERNS}}) {
+  while (my ($t,$td) = each %{$self->{$LOOPS}}) {
     while (my ($g,$gd) = each %$td) {
       push(@$ret,{$ATTR_TAG => $t,
 		  $ATTR_FILE => $gd->{$ATTR_FILE}});
@@ -68,50 +76,22 @@ sub play {
   my $self     = shift;
   my $segment  = shift;
   my $duration = $segment->duration();
-  my $genre    = $segment->genre() || AutoHarp::Genre->new('Rock');
 
-  #TODO: This all assumes on clock per segment 
+  #TODO: This all assumes one clock per segment 
   #(i.e. no meter changes. Tempo changes would be okay)
   #Fix in the future, maybe.
-  my $gname = $genre->name();
-  my $tag   = $segment->musicTag();
+  my $tag     = $segment->musicTag(); #chorus, verse, whatever
   if (!$tag) {
-    confess "Drum Loop got a segment without a music tag. Cannot have that";
+    confess "Drum Loop got a segment without a song element tag. Cannot have that";
   }
   my $clock = $segment->music->clock();  
-  my $loop  = $self->{$PATTERNS}{$tag}{$gname} || $genre->findLoop($clock,$tag);
+  my $loop  = $self->{$LOOPS}{$tag};
   if (!$loop) {
-    #crud. Gotta force it
-    my @options;
-    foreach my $p (grep {$_->{$ATTR_TAG} ne $SONG_ELEMENT_LEADIN} 
-		   @{$genre->getPatterns()}) {
-      my $pc = AutoHarp::Clock->new(%$p);
-      if ($clock->meter() eq $pc->meter()) {
-	push(@options,{pattern => $p,
-		       tempoDiff => abs($pc->tempo - $clock->tempo)}
-	    );
-      } 
-    }
-    my $td;
-    foreach my $o (grep {-f AutoHarp::Config::GenreLoopFile($_->{pattern}{$ATTR_FILE})} @options) {
-      #find the closest match.
-      if (!$td || $td > $o->{tempoDiff}) {
-	$loop = $o->{pattern};
-	$td   = $o->{tempoDiff};
-      }
-    }
-    if (!$loop) {
-      my $err = sprintf("Got no loop for %s (%s, %s %d bpm). I cannot play in this genre and meter",
-			$genre->name,
-			$tag,
-			$clock->meter(),
-			$clock->tempo());
-      confess $err;
-    }
+    $loop = $self->selectLoop($segment);
+    $self->{$LOOPS}{$tag} = $loop;
   }
-  $self->{$PATTERNS}{$tag}{$gname} ||= $loop;
   my $beat  = AutoHarp::Events::DrumTrack->new();
-  my $base  = __trackFromGenrePattern($loop);
+  my $base  = $loop->track();
   my $t     = $beat->time($segment->time());
   my $start = $t;
   while ($beat->measures($clock) < $segment->measures()) {
@@ -140,11 +120,18 @@ sub play {
     
   if (!$self->isPlaying() && !$beat->hasLeadIn()) {
     #did I start playing just now? Can I find a pickup?
-    my $pickup = __trackFromGenrePattern($genre->findLeadIn($clock));
-    if ($pickup && mostOfTheTime) {
-      my $measures = $pickup->measures($clock);
-      $pickup->time($segment->time - ($measures * $clock->measureTime));
-      $beat->add($pickup);
+    my $pickup = $self->findLeadIn($segment);
+    if ($pickup) {
+      my $pTrack = $pickup->track();
+      my $pMeas = $pTrack->measures($segment->music->clock);
+      if ($pMeas > 1 && (!$segment->isSongBeginning || often)) {
+	$pTrack->time(0);
+	#cut this down to its last measure. Or 2.
+	$pMeas -= pickOne(1,1,1,2);
+	$pTrack = $pTrack->subMelody($pMeas * $clock->measureTime);
+      }
+      $pTrack->time($segment->time - ($pMeas * $clock->measureTime));
+      $beat->add($pTrack);
     }
   }
   $self->handleTransition($segment,$beat);
@@ -162,6 +149,7 @@ sub handleTransition {
   my $bPer      = $clock->beatsPerMeasure();
   
   my $fillTime  = 0;
+  my $loop = $self->{$LOOPS}{$segment->musicTag()};
   if ($segment->transitionOutIsDown()) {
     #take some shit out
     my $beatsToAlter = int(rand($bPer)) + 1;
@@ -178,10 +166,10 @@ sub handleTransition {
       $save = ['Bass','Hat'];
     }
     $beat->pruneExcept($save,$timeToAlter);
-  } elsif ($segment->transitionOutIsUp() && $segment->genre()) {
-    my $f = $segment->genre->findFill($segment->music->clockAtEnd());
+  } elsif ($segment->transitionOutIsUp()) {
+    my $f = $self->findFill($segment);
     if ($f) {
-      my $fill      = __trackFromGenrePattern($f);
+      my $fill      = $f->track();
       my $measures  = $fill->measures($clock);
       if ($measures > 1 && unlessPigsFly) {
 	#just take the last measure or two of this
@@ -195,8 +183,10 @@ sub handleTransition {
       $beat->truncateToTime($fillStart);
       $beat->add($fill);
     }
-  } else {
-    #straight transition.
+  } elsif ($loop->track()->measures($clock) != $segment->measures()) {
+    #straight transition, and this loop isn't naturally the same length 
+    #as this segment. 
+    #assume there's no transition there, and we need to create one
     my $snare = pickOne($beat->snares());
     if (!$snare) {
       my $drums = $beat->split();
@@ -228,29 +218,143 @@ sub handleTransition {
   return 1;
 }
 
-sub __trackFromGenrePattern {
-  my $pattern = shift;
-  my $track;
-  if ($pattern) {
-    my $file = AutoHarp::Config::GenreLoopFile($pattern->{$ATTR_FILE});
-    if (!$file || !-f $file) {
-      confess "Received invalid pattern containing $file, which doesn't exist!";
+sub selectLoop {
+  my $self = shift;
+  my $segment = shift;
+  
+  #get the set of drum loops that match by type and meter
+  my $loops = AutoHarp::Model::Loop->loadByTypeAndMeter($DRUM_LOOP,
+							$segment->music->clock->meter);
+  #go through the existing loops, if any, and create some weights 
+  #based on bucket, song affiliation, and genre
+  my $weights;
+  foreach my $l (values %{$self->{$LOOPS}}) {
+    foreach my $b (@{$l->getBuckets()}) {
+      $weights->{$ATTR_BUCKET}{$b}++;
     }
-    eval {
-      my $file = 
-      my $ts = AutoHarp::Events::DrumTrack->fromFile($file);
-      my $g = shift(@$ts);
-      $track = shift(@$ts);
-    };
-    if ($@ || 
-	!$track || 
-	!$track->isa('AutoHarp::Events::DrumTrack') ||
-	!$track->duration) {
-      confess "Error loading drum track from $file ($@). Probably you want to nuke that file from your loop library";
+    foreach my $g (@{$l->genres()}) {
+      $weights->{$ATTR_GENRE}{$g->id}++;
+    }
+    foreach my $s (@{$l->getSongAffiliations}) {
+      $weights->{$ATTR_SONG}{$s}++;
     }
   }
-  return $track;
+  my $segmentGenreId = ($segment->genre) ? $segment->genre->id : 0;
+
+  #TODO: Like, evolve machine learning to do this:
+  #loop through the available choices that matched our meter.
+  #weigh ones that match what we've got heavier than those that don't. 
+  #Weights defined up top
+  my @options;
+  my $totalScores;
+  foreach my $l (@$loops) {
+    my $score;
+
+    #if the segment has a genre, require that we match it
+    my $genreMatch = !$segmentGenreId;
+    foreach my $g (@{$l->genres}) {
+      if ($g->id == $segmentGenreId) {
+	$genreMatch = 1;
+      }
+      $score += $weights->{$ATTR_GENRE}{$g->id} * $GENRE_WEIGHT;
+    }
+    next if (!$genreMatch);
+    
+    if ($l->matchesTempo($segment->music->clock->tempo())) {
+      $score += $TEMPO_WEIGHT;
+    }
+    foreach my $b (@{$l->getBuckets()}) {
+      $score += $weights->{$ATTR_BUCKET}{$b} * $BUCKET_WEIGHT;
+    }
+    foreach my $s (@{$l->getSongAffiliations}) {
+      if ($weights->{$ATTR_SONG}{$s}) {
+	$score += $weights->{$ATTR_SONG}{$s} * $SONG_AFFILIATION_WEIGHT;
+	if ($l->matchesSongElement($segment->songElement())) {
+	  $score += $SONG_ELEMENT_WEIGHT * $weights->{$ATTR_SONG}{$s};
+	}
+      }
+    }
+    if ($l->isFill()) {
+      #this is probably negative. Right? RIGHT?
+      $score += $FILL_WEIGHT;
+    }
+    if ($score > 0) {
+      push(@options, [$score,$l]);
+      $totalScores += $score;
+    }
+  }
+  if (scalar @options) {
+    #pick randomly based on weights of available options
+    my $r          = rand();
+    my $rangeStart = 0;
+    for (my $i = 0; $i < scalar @options; $i++) {
+      my $w = $options[$i][0] / $totalScores;
+      if ($r >= $rangeStart && $r < ($rangeStart + $w)) {
+	return $options[$i][1];
+      }
+    }
+  }
+  if (scalar @$loops) {
+    #dangit--nothing weighted matched. Just pick something in the same meter
+    return pickOne($loops);
+  }
+  confess sprintf ("Cannot play in %s meter with genre %s. No drum loops found",
+		   $segment->music->clock->meter,
+		   ($segmentGenreId) ? $segment->genre->name : 'unset');
 }
+
+sub findLoopBySegmentAndElement {
+  my $self    = shift;
+  my $segment = shift;
+  my $element = shift;
+  my $eMap = {map {$_->loop_id => 1} @{AutoHarp::Model::LoopAttribute->all({$SONG_ELEMENT => $element})}};
+  my $loop    = $self->{$LOOPS}{$segment->musicTag};  
+
+  my @definites;
+  my @maybes;
+  my $attrs = {};
+  if ($loop) {
+    $attrs->{$ATTR_SONG} = {map {$_ => 1} @{$loop->getSongAffiliations}};
+    $attrs->{$ATTR_BUCKET} = {map {$_ => 1} @{$loop->getBuckets}};
+    $attrs->{$ATTR_TEMPO} = $loop->getClock()->tempo;
+  }
+  foreach my $eLoop (grep {$eMap->{$_->id}} 
+		     @{AutoHarp::Model::Loop->loadByTypeAndMeter
+			 ($DRUM_LOOP, $segment->music->clock->meter)
+		       }) {
+    if (scalar grep {$attrs->{$ATTR_SONG}{$_}} @{$eLoop->getSongAffiliations()}) {
+      #yo. Strong affiliation
+      push(@definites,$eLoop);
+    } else {
+      my $bucketsInCommon = scalar 
+	grep {$attrs->{$ATTR_BUCKET}{$_}} 
+	  @{$eLoop->getBuckets()};
+      if ($bucketsInCommon > 1 && $eLoop->matchesTempo($attrs->{$ATTR_TEMPO})) {
+	#a couple of buckets and tempo, so yes
+	push(@definites, $eLoop);
+      } else {
+	push(@maybes,$eLoop);
+      }
+    }
+  }
+  if (scalar @definites && unlessPigsFly) {
+    return pickOne(@definites);
+  } 
+  return pickOne(@maybes);
+}
+
+sub findFill {
+  my $self = shift;
+  my $segment = shift;
+  return $self->findLoopBySegmentAndElement($segment,$SONG_ELEMENT_FILL);
+}
+
+sub findLeadIn {
+  my $self    = shift;
+  my $segment = shift;
+  return $self->findLoopBySegmentAndElement($segment, $SONG_ELEMENT_INTRO);
+}
+  
 
 "Loosen your ties";
 

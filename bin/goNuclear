@@ -1,0 +1,27 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Model::Loop;
+use AutoHarp::Model::Genre;
+
+print "Really??? ";
+chomp(my $resp = <STDIN>);
+if ($resp !~ /^y/i) {
+  print "Okay. NOT DOING THIS.\n";
+  exit(0);
+}
+print "GOING NUCLEAR.\n";
+
+foreach my $loop (@{AutoHarp::Model::Loop->all()}) {
+  $loop->delete();
+}
+
+foreach my $genre (@{AutoHarp::Model::Genre->where("id > 16")}) {
+  $genre->delete();
+}
+
+print "Nuclearness went-ed.\n";
+
+exit(0);

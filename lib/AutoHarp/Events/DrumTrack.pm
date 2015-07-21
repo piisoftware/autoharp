@@ -99,7 +99,7 @@ sub fromDataStructure {
   return $self;
 }
 
-sub isDrumTrack {
+sub isPercussion {
   #why yes I am
   return 1;
 }

@@ -5,7 +5,7 @@ use strict;
 use AutoHarp::Constants;
 use AutoHarp::Scale;
 use AutoHarp::Clock;
-use AutoHarp::Genre;
+use AutoHarp::Model::Genre;
 use AutoHarp::Event::Text;
 use Carp;
 
@@ -79,7 +79,7 @@ sub fromDataStructure {
     my $clock = AutoHarp::Clock->new(%$data);
     my $scale = AutoHarp::Scale->new(%$data);
     my $genre = ($data->{$ATTR_GENRE}) ? 
-      AutoHarp::Genre->new($data->{$ATTR_GENRE}) : undef;
+      AutoHarp::Model::Genre->loadByName($data->{$ATTR_GENRE}) : undef;
     if (!$timeSet) {
       $self->time($clock->time);
       $timeSet = 1;
@@ -281,6 +281,11 @@ sub measures {
   return scalar @{$self->eachMeasure()};
 }
 
+sub bars {
+  my $self = shift;
+  return $self->measures(@_);
+}
+
 sub setMeasures {
   my $self         = shift;
   my $newMeasures  = int(shift);
@@ -351,7 +356,7 @@ sub genre {
     return $genre;
   } 
   if ($gs[0]) {
-    return AutoHarp::Genre->new(($gs[0]->text() =~ /$ATTR_GENRE: (.+)/));
+    return AutoHarp::Model::Genre->loadByName(($gs[0]->text() =~ /$ATTR_GENRE: (.+)/));
   }
   return;
 }
