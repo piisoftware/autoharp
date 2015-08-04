@@ -25,6 +25,17 @@ sub hashArgs {
   return (ref($first) eq 'HASH') ? $first : {@_};
 }
 
+sub uid {
+  my $self = shift;
+  my $arg  = shift;
+  if ($arg) {
+    $self->{$ATTR_UID} = $arg;
+  } elsif (!$self->{$ATTR_UID}) {
+    $self->{$ATTR_UID} = (ref($self) =~ /::([^:]+)$/)[0] . "_" . int(rand(1000));
+  }
+  return $self->{$ATTR_UID};
+}
+
 sub requireClass {
   my $class = shift;
   my $mod   = $class;
@@ -146,16 +157,12 @@ sub _recCopy {
 sub objectAccessor {
   my $self     = shift;
   my $attr     = shift;
-  my $isa      = shift;
   my $val      = shift;
-  #make sure $isa is Modulified
-  $isa = uc(substr($isa,0,1)) . substr($isa,1);
-  $isa = "AutoHarp::$isa" if ($isa !~ /AutoHarp::/);
   if ($val) {
-    if (ref($val) =~ /AutoHarp/ && $val->isa($isa)) {
+    if (ref($val) =~ /AutoHarp/) {
       $self->{$attr} = $val->clone;
     } else {
-      confess "Attempt to set object accessor $attr with non $isa object " . ref($val);
+      confess "Attempt to set object accessor $attr with non-object " . ref($val);
     }
   }
   return $self->{$attr};

@@ -1,6 +1,7 @@
 package AutoHarp::Model::Loop;
 
 use AutoHarp::Model::LoopAttribute;
+use AutoHarp::Model::LoopFeedback;
 use AutoHarp::Model::LoopGenre;
 use AutoHarp::Model::Genre;
 
@@ -9,8 +10,11 @@ use AutoHarp::Events::DrumTrack;
 use AutoHarp::Events;
 use AutoHarp::Clock;
 use AutoHarp::Scale;
-use IO::String;
 use MIME::Base64;
+use IO::String;
+use IO::Pipe;
+
+use MIDI;
 use Carp;
 
 use base qw(AutoHarp::Model);
@@ -29,22 +33,22 @@ sub fromFile {
   my $class   = shift;
   my $file    = shift;
   my $verbose = shift;
-  my $tracks;
+  my $events;
   eval {
-    $tracks = AutoHarp::Events->fromFile($file);
+    $events = AutoHarp::Events->fromFile($file);
   };
 
   if ($@) {
     print "error importing: $@\n" if ($verbose);
     return;
   }
-  if (scalar @$tracks > 2) {
+  if (scalar @$events > 2) {
     print "file contains more than one track, ignoring" if ($verbose);
     return;
   }
   
-  my $guide = $tracks->[0];
-  my $track = $tracks->[1];
+  my $guide = $events->[0];
+  my $track = $events->[1];
   #all is well, so grab the midi direct from the file
   open(MIDI, "$file");
   binmode MIDI;
@@ -64,6 +68,46 @@ sub fromFile {
   return $self;
 }
 
+sub fromOpus {
+  my $class  = shift;
+  my $opus   = shift;
+  my $type   = shift;
+  my $midiBuffer;
+
+  #open a pipe in order to read (from the opus)
+  #and write (to a buffer that we can save to the DB) 
+  my $pipe = IO::Pipe->new();
+  my $pid = fork();
+
+  if($pid) { 
+    # Parent is the reader
+    $pipe->reader();
+    #Wait for the child to finish
+    waitpid($pid, 0);
+    #write to the buffer once it's done
+    my ($n,$buff);
+    while($n = read($pipe,$buff,100)) {
+      $midiBuffer .= $buff;
+    }
+  } else {
+    $pipe->writer();
+    $opus->write_to_handle($pipe);
+    exit(0);
+  }
+
+  my $loop   = $class->new();
+  my $events = AutoHarp::Events->fromOpus($opus);
+  my $guide  = $events->[0];
+  
+  $loop->type($type || $ATTR_MUSIC);
+  $loop->meter($guide->clock->meter);
+  $loop->tempo($guide->clock->tempo);
+  $loop->scale($guide->scale->key);
+  $loop->bars($guide->measures());
+  $loop->midi(encode_base64($midiBuffer));
+  return $loop;
+}
+
 sub isDrumLoop {
   return ($_[0]->type eq $DRUM_LOOP);
 }
@@ -75,26 +119,26 @@ sub matchesTempo {
   return (abs(1 - $self->tempo / $tempo) <= $TEMPO_MATCH_PCT);
 }
 
-sub track {
+sub events {
   my $self    = shift;
   my $verbose = shift;
-  my $track;
+  my $events;
   eval {
     my $handle = IO::String->new(decode_base64($self->midi));
     my $opus = MIDI::Opus->new({'from_handle' => $handle});
-    my $tracks;
+    my $eventSet;
     if ($self->isDrumLoop()) {
-      $tracks = AutoHarp::Events::DrumTrack->fromOpus($opus);
+      $eventSet = AutoHarp::Events::DrumTrack->fromOpus($opus);
     } else {
-      $tracks = AutoHarp::Events->fromOpus($opus);
+      $eventSet = AutoHarp::Events::Melody->fromOpus($opus);
     }
-    $track = $tracks->[1];
+    $events = $eventSet->[1];
   };
   if ($@ && $verbose) {
-    print "Couldn't generate track from loop: $@";
+    print "Couldn't generate events from loop: $@";
 
   }
-  return $track;
+  return $events;
 }
 
 #get the clock from this loop's metadata
@@ -192,6 +236,13 @@ sub genres {
 	 ];
 }
 
+#this loop came out of the machine, 
+#and belongs to no other genre
+sub isMachined {
+  my $gs = $_[0]->genres();
+  return (scalar @$gs == 1 && $gs->[0]->name eq $ATTR_MACHINE_GENRE);
+}
+
 sub delete {
   my $self = shift;
   #delete all loopGenres...
@@ -201,6 +252,10 @@ sub delete {
   #and all loopAttributes...
   foreach my $la (@{AutoHarp::Model::LoopAttribute->all(loop_id => $self->id)}) {
     $la->delete();
+  }
+  #and all loopFeedback
+  foreach my $lf (@{AutoHarp::Model::LoopFeedback->all(loop_id => $self->id)}) {
+    $lf->delete();
   }
   return $self->SUPER::delete();
 }

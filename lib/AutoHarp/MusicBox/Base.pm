@@ -34,6 +34,35 @@ sub new {
 sub fromDataStructure {
   my $class = shift;
   my $ds    = shift;
+  if (ref($ds) eq 'ARRAY') {
+    return $class->fromLegacyDataStructure($ds);
+  }
+
+  my $self  = {$ATTR_GUIDE => AutoHarp::Events::Guide->fromString($ds->{$ATTR_GUIDE})};
+  my $progStr      = $ds->{$ATTR_PROGRESSION};
+  my $trueMeasures = AutoHarp::Notation::CountMeasures($progStr);
+  if ($trueMeasures) {
+    $self->{$ATTR_GUIDE}->measures($trueMeasures);
+  }
+  $self->{$ATTR_PROGRESSION} = 
+    AutoHarp::Events::Progression->fromString($progStr, $self->{$ATTR_GUIDE});
+  if ($ds->{$ATTR_MELODY}) {
+    my $ms = (ref($ds->{$ATTR_MELODY}) eq 'ARRAY') ? 
+      $ds->{$ATTR_MELODY} : [$ds->{$ATTR_MELODY}];
+    my $mel = AutoHarp::Events::Melody->new();
+    $mel->time($self->{$ATTR_GUIDE}->time);
+    foreach my $m (@$ms) {
+      $mel->add(AutoHarp::Events::Melody->fromString($m,$self->{$ATTR_GUIDE}));
+    }
+    $self->{$ATTR_MELODY} = $mel;
+  }
+  return bless $self,$class;
+}
+
+#use the old, array-based DS for music box bases
+sub fromLegacyDataStructure {
+  my $class = shift;
+  my $ds    = shift;
   my $self  = {};
   my $guide = 
     $self->{$ATTR_GUIDE} = 
@@ -52,11 +81,6 @@ sub fromDataStructure {
       $mel->add(AutoHarp::Events::Melody->fromString($m,$guide));
     }
     $self->{$ATTR_MELODY} = $mel;
-    my $mms = $mel->measures($guide->clock());
-    $trueMeasures = $mms if ($mms > $trueMeasures);
-  }
-  if ($trueMeasures) {
-    $self->{$ATTR_GUIDE}->measures($trueMeasures);
   }
   return bless $self,$class;
 }
@@ -64,19 +88,13 @@ sub fromDataStructure {
 sub toDataStructure {
   my $self  = shift;
   my $guide = $self->guide();
-  my $ret   = [$guide->toString()];
-  if (!$self->hasProgression()) {
-    if ($self->hasMelody()) {
-      #need a chord progression to properly construct & reclaim a musical base
-      AutoHarp::Generator->new()->harmonize($self);
-    } else {
-      #nothing to return here
-      return $ret;
-    }
+  my $ret   = {$ATTR_GUIDE => $guide->toString()};
+  if ($self->hasProgression()) {
+    $ret->{$ATTR_PROGRESSION} = $self->progression->toString($guide);
   }
-  push(@$ret,$self->progression->toString($guide));
   if ($self->hasMelody()) {
-    push(@$ret, @{$self->melody->toDataStructure($guide)});
+    my $ms = $self->melody->toDataStructure($guide);
+    $ret->{$ATTR_MELODY} = (scalar @$ms == 1) ? $ms->[0] : $ms;
   }
   return $ret;
 }
@@ -87,13 +105,13 @@ sub toHook {
 }
 
 sub guide {
-  return $_[0]->objectAccessor($ATTR_GUIDE, 'AutoHarp::Events::Guide', $_[1]);
+  return $_[0]->objectAccessor($ATTR_GUIDE, $_[1]);
 }
 
 sub progression {
   my $self = shift;
   my $arg = shift;
-  my $res = $self->objectAccessor($ATTR_PROGRESSION, 'AutoHarp::Events::Progression', $arg);
+  my $res = $self->objectAccessor($ATTR_PROGRESSION, $arg);
   if ($arg && $res) {
     $res->time($self->time());
     #I'll allow you to set our duration if our guide is empty

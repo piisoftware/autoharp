@@ -36,6 +36,24 @@ sub choosePatch {
   $self->SUPER::choosePatch($inst);
 }
 
+sub toString {
+  my $self = shift;
+  return $self->SUPER::toString(). ", " .
+    join(", ",map {"PV_$_: $self->{$PLAY_VARS}{$_}"} keys %{$self->{$PLAY_VARS}});
+}
+
+sub fromString {
+  my $class = shift;
+  my $self = $class->SUPER::fromString(@_);
+  my @varKeys = grep {/^PV_/} keys %$self;
+  foreach my $k (@varKeys) {
+    my $pv = ($k =~ /PV_(.+)/)[0];
+    $self->{$PLAY_VARS}{$pv} = $self->{$k};
+    delete $self->{$k};
+  }
+  return $self;
+}
+      
 sub reset {
   my $self = shift;
   delete $self->{$RHYTHM_PATTERN};
@@ -127,9 +145,6 @@ sub buildLoop {
   #off-beat (reggae and sometimes jazz or funk) or on-beat (everything else)
   my $offBeat  = $self->{$PLAY_VARS}{$OFFBEAT};
   my $octave = $self->{$PLAY_VARS}{$OCTAVE};
-  if (almostNever) {
-
-  }
   my $chordType = $self->{$PLAY_VARS}{$CHORD_TYPE};
   my $followHats = $self->{$PLAY_VARS}{$FOLLOW_HATS};
 
@@ -171,7 +186,6 @@ sub buildLoop {
   
   #gets an array of measure times for the given loop
   my $rhythmGuide = $self->buildRhythmGuide($segment,$guidePerformance,$followHats);
-
   my $pattern;
   my $soundingUntil;
   my $lastPitch;
@@ -184,7 +198,7 @@ sub buildLoop {
     my $time  = $this->time;
     my $vel   = $this->velocity;
 
-    if ($time < $soundingUntil) {
+    if ($soundingUntil > $segment->time && $time < $soundingUntil) {
       #we're still hitting a previous chord. 
       #Add some aftertouch, but no new note
       $loop->add([$EVENT_CHANNEL_AFTERTOUCH,

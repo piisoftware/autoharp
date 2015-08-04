@@ -5,6 +5,7 @@ use Readonly;
 
 @EXPORT = qw(
 	      $AH_CLASS
+	      $ATTR_AUTOHARP_SONG
 	      $ATTR_BARS
 	      $ATTR_BUCKET
 	      $ATTR_CHANNEL
@@ -18,6 +19,7 @@ use Readonly;
 	      $ATTR_FOLLOW
 	      $ATTR_GENERATOR
 	      $ATTR_GENRE
+	      $ATTR_MACHINE_GENRE
 	      $ATTR_GUIDE
 	      $ATTR_HOOK
 	      $ATTR_INSTRUMENT
@@ -26,6 +28,7 @@ use Readonly;
 	      $ATTR_INSTRUMENT_ROLE
 	      $ATTR_INTERVALS
 	      $ATTR_KEY
+	      $ATTR_LOOPS
 	      $ATTR_LOOP_TYPE
 	      $ATTR_MELODY
 	      $ATTR_METER
@@ -94,19 +97,6 @@ use Readonly;
 	      $MUSIC_BOX
 	      $NOTE_MINIMUM_TICKS
 	      $PERCUSSION_CHANNEL
-	      $PREF_COMPOSER_CLASS
-	      $PREF_DEFAULT_KEY
-	      $PREF_DEFAULT_METER
-	      $PREF_DEFAULT_TEMPO
-	      $PREF_GENERATOR_CLASS
-	      $PREF_HOOK_INSTRUMENT
-	      $PREF_MELODY_INSTRUMENT
-	      $PREF_PATTERN_INSTRUMENT
-	      $PREF_PLAYER
-	      $PREF_PROG_INSTRUMENT
-	      $PREF_SILENCE
-	      $PREF_VERBOSE
-	      $PREF_WORKING_DIRECTORY
 	      $SONG_ELEMENT
 	      $SONG_ELEMENT_BEGIN
 	      $SONG_ELEMENT_BRIDGE
@@ -124,7 +114,6 @@ use Readonly;
 	      $SONG_ELEMENT_VERSE
 	      $SONG_SECTION
 	      $SONG_SEGMENT
-	      $SOURCE_MUSIC_BOX
 	      $TICKS_PER_BEAT
 	      $TICK_LENGTH
 	      upCase
@@ -162,12 +151,14 @@ Readonly::Scalar $TICK_LENGTH              => 'length';
 Readonly::Scalar $TICKS_PER_BEAT           => 240;
 Readonly::Scalar $NOTE_MINIMUM_TICKS       => $TICKS_PER_BEAT / 4; #16th in 4/4
 
+Readonly::Scalar $ATTR_AUTOHARP_SONG       => 'AutoHarpSong';
 Readonly::Scalar $ATTR_BARS                => 'bars';
 Readonly::Scalar $BASS_INSTRUMENT          => 'bass';
 Readonly::Scalar $ATTR_BUCKET              => 'bucket';
 Readonly::Scalar $ATTR_CHANNEL             => 'channel';
 Readonly::Scalar $ATTR_CLOCK               => 'clock';
 Readonly::Scalar $ATTR_LOOP_TYPE           => 'loop_type';
+Readonly::Scalar $ATTR_LOOPS               => 'loops';
 Readonly::Scalar $THEME_INSTRUMENT         => 'theme';
 Readonly::Scalar $ATTR_COMPOSER            => 'composer';
 Readonly::Scalar $ATTR_COMPOSITION         => 'composition';
@@ -181,6 +172,7 @@ Readonly::Scalar $ATTR_FILE                => 'file';
 Readonly::Scalar $ATTR_FOLLOW              => 'follow';
 Readonly::Scalar $ATTR_GENERATOR           => 'generator';
 Readonly::Scalar $ATTR_GENRE               => 'genre';
+Readonly::Scalar $ATTR_MACHINE_GENRE       => 'Ex Machina';
 Readonly::Scalar $ATTR_GUIDE               => 'guide';
 Readonly::Scalar $HOOK_INSTRUMENT          => 'hook';
 Readonly::Scalar $ATTR_HOOK                => 'hook';
@@ -224,20 +216,6 @@ Readonly::Scalar $ATTR_VELOCITY            => 'velocity';
 Readonly::Scalar $ATTR_VERBOSE             => 'verbose';
 Readonly::Scalar $ATTR_VOLUME              => 'volume';
 Readonly::Scalar $PERCUSSION_CHANNEL       => 9;
-Readonly::Scalar $PREF_COMPOSER_CLASS      => 'music_composer_class';
-Readonly::Scalar $PREF_DEFAULT_KEY         => 'default_key';
-Readonly::Scalar $PREF_DEFAULT_METER       => 'default_meter';
-Readonly::Scalar $PREF_DEFAULT_TEMPO       => 'default_tempo';
-Readonly::Scalar $PREF_GENERATOR_CLASS     => 'music_generator_class';
-Readonly::Scalar $PREF_HOOK_INSTRUMENT     => 'hook_instrument';
-Readonly::Scalar $PREF_MELODY_INSTRUMENT   => 'melody_instrument';
-Readonly::Scalar $PREF_PATTERN_INSTRUMENT  => 'pattern_instrument';
-Readonly::Scalar $PREF_PLAYER              => 'midi_player';
-Readonly::Scalar $PREF_PROG_INSTRUMENT     => 'progression_instrument';
-Readonly::Scalar $PREF_SILENCE             => 'silence_preference';
-Readonly::Scalar $PREF_VERBOSE             => 'verbosity';
-Readonly::Scalar $PREF_WORKING_DIRECTORY   => 'working_directory';
-Readonly::Scalar $SOURCE_MUSIC_BOX         => 'sourceMusicBox';
 
 Readonly::Scalar $MUSIC_BOX                   => 'MusicBox';
 Readonly::Scalar $SONG_SECTION                => 'section';

@@ -20,35 +20,6 @@ sub new {
   return $self;
 }
 
-sub fromDataStructure {
-  my $class = shift;
-  my $ds    = shift;
-  my $self  = {};
-  my $guide = 
-    $self->{$ATTR_GUIDE} = 
-      AutoHarp::Events::Guide->fromString(shift(@$ds));
-  
-  if (scalar @$ds) {
-    my $mel = AutoHarp::Events::Melody->new();
-    $mel->time($guide->time);
-    foreach my $m (@$ds) {
-      $mel->add(AutoHarp::Events::Melody->fromString($m,$guide));
-    }
-    $self->{$ATTR_MELODY} = $mel;
-    $self->{$ATTR_GUIDE}->measures($mel->measures($guide->clock));
-  }
-
-  return bless $self,$class;
-}
-
-sub toDataStructure {
-  my $self = shift;
-  my $ds   = $self->SUPER::toDataStructure();
-  #splice out the progression, which we don't use
-  splice(@$ds,1,1);
-  return $ds;
-}
-
 sub theHook {
   return $_[0]->melody();
 }

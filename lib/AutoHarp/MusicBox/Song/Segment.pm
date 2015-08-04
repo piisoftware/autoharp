@@ -24,6 +24,7 @@ sub toDataStructure {
     confess "Attempted to serialize music segment with performances but no music!";
   } 
   my $ds = {$AH_CLASS => ref($self),
+	    $ATTR_UID => $self->uid(),
 	    $SONG_ELEMENT_TRANSITION => $self->transitionOut(),
 	   };
   if ($self->hasMusic()) {
@@ -177,7 +178,7 @@ sub clearHook {
 }
 
 sub hook {
-  return $_[0]->objectAccessor($ATTR_HOOK, 'AutoHarp::MusicBox::Hook', $_[1]);
+  return $_[0]->objectAccessor($ATTR_HOOK, $_[1]);
 }
 
 sub hasHook {

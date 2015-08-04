@@ -8,7 +8,9 @@ use AutoHarp::Model;
 my @TABLES = qw(Loop
 		Genre
 		LoopGenre
-		LoopAttribute);
+		LoopAttribute
+		LoopFeedback
+	      );
 
 foreach my $t (@TABLES) {
   require "AutoHarp/Model/$t.pm";

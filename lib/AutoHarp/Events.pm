@@ -2,16 +2,19 @@ package AutoHarp::Events;
 use base qw(AutoHarp::Class);
 
 use AutoHarp::Events::Guide;
+use AutoHarp::Model::Loop;
 use AutoHarp::Constants;
-use MIDI::Opus;
 use strict;
 use Carp;
+use MIDI;
 
 sub new {
   my $class    = shift;
   my $events   = shift;
-  my $time     = shift || 0;
+  my $sawZero;
+  my $time;
   my $self     = [];
+
   if (ref($events)) {
     foreach my $e (@$events) {
       if (ref($e) eq 'ARRAY') {
@@ -25,12 +28,18 @@ sub new {
       if (!ref($e) || !$e->isa('AutoHarp::Event')) {
 	next;
       }
-      if (!$e->isMarker()) {
-	push(@$self,$e);
+
+      next if ($e->isZeroEvent() && $sawZero++);
+
+      push(@$self,$e);
+      if (!length($time) || $time > $e->time) {
+	$time = $e->time;
       }
     }
   }
-  unshift(@$self,AutoHarp::Event->zeroEvent($time));
+  if (!$sawZero) {
+    unshift(@$self,AutoHarp::Event->zeroEvent($time));
+  }
   bless $self,$class;
   $self->sort();
   return $self;
@@ -528,8 +537,10 @@ sub quantize {
 sub export {
   my $self = shift;
   my $ret = [];
+  my $minT;
   foreach my $e (@$self) {
     next if ($e->isMarker());
+    $minT = $e->time if ($e->time < $minT || !length($minT));
     if ($e->isNotes()) {
       foreach my $n (@{$e->toNotes()}) {
 	push(@$ret,[@$n]);
@@ -537,6 +548,10 @@ sub export {
     } else {
       push(@$ret, [@$e]);
     }
+  }
+  if ($minT < 0) {
+    $self->dump;
+    confess "Encountered negative time values while translating score to events!";
   }
   return MIDI::Score::score_r_to_events_r($ret);
 }
@@ -590,6 +605,54 @@ sub dump {
   foreach my $n (@$self) {
     $n->dump;
   }
+}
+
+#write this as a loop to the database
+sub transcribe {
+  my $self  = shift;
+  my $guide = shift;
+  if (!$guide) {
+    confess "Transcribing to DB requires a guide along with the events";
+  }
+  my $cGuide = $guide->clone();
+  #whack off any intro (notes before the 0 of this track)
+  #Later we might decide to save them. TODO: That?
+  my $bars   = $self->measures($guide->clock);
+  my $cTrack = $self->subList($self->time,$self->reach());
+  my $clorge = $cTrack->clone();
+  $cGuide->time(0);
+  $cTrack->time(0);
+  my $clodge = $cTrack->clone();
+  my $op   = MIDI::Opus->new({format => 1,
+			      ticks => $TICKS_PER_BEAT,
+			      tracks => [$cGuide->track, $cTrack->track]
+			     });
+  my $loop = AutoHarp::Model::Loop->fromOpus($op);
+  if ($loop->events()->measures($guide->clock) != $bars) {
+    print "WAS\n";
+    $self->dump();
+    print "\nGOT\n";
+    $loop->events()->dump();
+    print "\nALSO\n";
+    $clorge->dump();
+    print "\nAND THEN\n";
+    $clodge->dump();
+    
+    confess sprintf "Writing a %d measure events resulted in a %d measure loop",
+      $bars,
+	$loop->events()->measures($guide->clock);
+  }
+  if ($self->isPercussion()) {
+    $loop->type($DRUM_LOOP);
+  }
+  #make sure we don't already have this in the database
+  my $exists = AutoHarp::Model::Loop->loadBy({midi => $loop->midi,
+					      type => $loop->type});
+  if ($exists->isEmpty()) {
+    $loop->save();
+    return $loop;
+  } 
+  return $exists;
 }
 
 sub _toEventList {

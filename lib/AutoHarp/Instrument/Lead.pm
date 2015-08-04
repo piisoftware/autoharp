@@ -69,6 +69,7 @@ sub play {
       my $p = $solo->[$i+1];
       if ($n->isNote() && 
 	  $p->isNote() && 
+	  $n->pitch != $p->pitch && 
 	  abs($n->pitch - $p->pitch) < 3 &&
 	  mostOfTheTime) {
 	my $wDiff = int((($n->pitch - $p->pitch) / 2) * $WHEEL_ABS_MAX);

@@ -38,6 +38,12 @@ sub fromString {
   my $class     = shift;
   my $string    = shift;
   my $guide     = shift;
+  if ($string =~ /^\d+$/) {
+    #assume it's a loop
+    my $es = AutoHarp::Model::Loop->load($string)->events();
+    bless $es,$class;
+    return $es;
+  }
   return AutoHarp::Notation::String2Melody($string, $guide);
 }
 

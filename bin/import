@@ -58,7 +58,7 @@ sub recProc {
 	  next;
 	}
 	if ($loop->bars() == 1 && 
-	    (scalar grep {$_->isMusic()} @{$loop->track(1)->events}) <= 1) {
+	    (scalar grep {$_->isMusic()} @{$loop->events(1)->events}) <= 1) {
 	  print "$target seems to be a single note, skipping...\n";
 	  return;
 	}

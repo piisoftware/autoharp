@@ -1,0 +1,14 @@
+#!/usr/bin/perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use IO::Handle;
+use MIDI;
+use AutoHarp::Model::Loop;
+
+my $opus = MIDI::Opus->new({from_file => '/home/marz/Dropbox/autoharp/midi/Whistler.midi'});
+my $loop = AutoHarp::Model::Loop->fromOpus($opus);
+print $loop->midi;
+print "\n";
+exit(0);
+

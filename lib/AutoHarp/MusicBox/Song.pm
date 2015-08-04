@@ -20,6 +20,8 @@ my $VERBOSE     = !$ENV{AUTOHARP_QUIET};
 my $CHANNELS    = 'channels';
 my $FIRST_HALF  = 'firstHalfPlayers';
 my $SECOND_HALF = 'secondHalfPlayers';
+my $FIRST_UID   = 'firstHalfUID';
+my $SECOND_UID  = 'secondHalfUID';
 my $PLAYERS     = 'players';
 
 sub CompositionFromDataStructure {
@@ -35,6 +37,8 @@ sub CompositionFromDataStructure {
       );
     $e->firstHalfPerformers([split(/\s*,\s*/,$d->{$FIRST_HALF})]);
     $e->secondHalfPerformers([split(/\s*,\s*/,$d->{$SECOND_HALF})]);
+    $e->firstHalfUID($d->{$FIRST_UID});
+    $e->secondHalfUID($d->{$SECOND_UID});
     push(@$comp, $e);
   }
   return $comp;
@@ -56,7 +60,8 @@ sub toDataStructure {
       }
       $nextData = {$ATTR_TAG   => $segment->tag(),
 		   $ATTR_MUSIC => $segment->musicTag(),
-		   $FIRST_HALF => $performers
+		   $FIRST_HALF => $performers,
+		   $FIRST_UID  => $segment->uid()
 		  };
     } elsif ($segment->isSecondHalf) {
       if (!$nextData || !$nextData->{$FIRST_HALF}) {
@@ -66,6 +71,7 @@ sub toDataStructure {
 	confess "Second half segment doesn't match first half segment, cannot build data structure";
       } 
       $nextData->{$SECOND_HALF} = $performers;
+      $nextData->{$SECOND_UID} = $segment->uid();
       $nextData->{$SONG_ELEMENT_TRANSITION} = $segment->transitionOut();
       push(@$ds,$nextData);
       undef $nextData;
@@ -73,7 +79,8 @@ sub toDataStructure {
       push(@$ds,{$ATTR_TAG => $segment->tag(),
 		 $ATTR_MUSIC => $segment->musicTag(),
 		 $PLAYERS => $performers,
-		 $SONG_ELEMENT_TRANSITION => $segment->transitionOut()
+		 $SONG_ELEMENT_TRANSITION => $segment->transitionOut(),
+		 $ATTR_UID => $segment->uid,
 		});
     }
   }
@@ -112,8 +119,24 @@ sub retimeSegments {
     if ($soundTime < 0) {
       $startTime = $startSeg->music->clock->roundToNextMeasure(abs($soundTime));
     }
+    my $counter = 0;
     foreach my $seg (@{$self->segments()}) {
+      $counter++;
       $seg->time($startTime);
+      if ($seg->soundingTime < 0) {
+	my $st;
+	foreach my $s (@{$seg->scores()}) {
+	  if (!$st || $s->soundingTime < $st->soundingTime) {
+	    $st = $s;
+	  }
+	}
+	$st->dump();
+	confess sprintf("Segment %d has sounding time %d, despite starting at %d",
+			$counter,
+			$seg->soundingTime,
+			$startTime
+		       );
+      }
       $startTime = $seg->reach();
     }
   }
@@ -334,8 +357,14 @@ sub out {
     } else {
       $file = $output;
     }
-    $self->opus($mix)->write_to_file($file);
-    $self->file($file);
+    eval {
+      my $o = $self->opus($mix);
+      $o->write_to_file($file);
+      $self->file($file);
+    };
+    if ($@) {
+      confess "Write to opus failed: $@";
+    }
     return 1;
   }
   return;

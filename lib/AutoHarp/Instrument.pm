@@ -118,6 +118,32 @@ sub fromString {
   return $self;
 }
 
+#return a map of band instruments
+sub band {
+  my $class = shift;
+  my $band = {};
+  my @i = ($DRUM_LOOP,
+	   $BASS_INSTRUMENT,
+	   $RHYTHM_INSTRUMENT,
+	   $PAD_INSTRUMENT,
+	   $LEAD_INSTRUMENT,
+	   $HOOK_INSTRUMENT);
+  my $themes = pickOne(1,2,3);
+  for (1..$themes) {
+    push(@i, $THEME_INSTRUMENT);
+  }
+  foreach my $i (@i) {
+    my $inst = $class->new($ATTR_INSTRUMENT_CLASS => $i); 
+    my $uid  = $i;
+    while (exists $band->{$uid}) {
+      $uid .= "1" if ($uid !~ /\d+$/);
+      $uid++;
+    }
+    $inst->uid($uid);
+    $band->{$uid} = $inst;
+  }
+  return $band;
+}
 
 sub toString {
   my $self = shift;

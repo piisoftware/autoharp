@@ -28,6 +28,7 @@ sub DataDirectory {
 sub MidiFile {
   my $fileName = shift;
   $fileName =~ s/\.\w+$//;
+  $fileName =~ s/\s//g;
   my $dir = MidiDirectory();
   return "$dir$DS$fileName.midi";
 }
@@ -35,6 +36,7 @@ sub MidiFile {
 sub DataFile {
   my $fileName = shift;
   $fileName =~ s/\.\w+$//;
+  $fileName =~ s/\s//g;
   my $dir = DataDirectory();
   return "$dir$DS$fileName.json";
 }

@@ -21,17 +21,6 @@ sub name {
   return $self->{$ATTR_NAME};
 }
 
-sub uid {
-  my $self = shift;
-  my $arg  = shift;
-  if ($arg) {
-    $self->{$ATTR_UID} = $arg;
-  } elsif (!$self->{$ATTR_UID}) {
-    $self->{$ATTR_UID} = time() . "_" . int(rand(1000));
-  }
-  return $self->{$ATTR_UID};
-}
-
 sub slotName {
   my $self     = shift;
   my $slotName = shift;

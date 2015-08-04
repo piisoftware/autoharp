@@ -504,5 +504,13 @@ sub secondHalfPerformers {
   return $_[0]->scalarAccessor('shp',$_[1]);
 }
 
+sub firstHalfUID {
+  return $_[0]->scalarAccessor('fuid',$_[1]);
+}
+
+sub secondHalfUID {
+  return $_[0]->scalarAccessor('suid',$_[1]);
+}
+
 "That stoner should know better...";
 

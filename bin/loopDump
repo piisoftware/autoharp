@@ -1,0 +1,24 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use AutoHarp::Model::Loop;
+use MIME::Base64;
+use IO::String;
+use strict;
+
+my $id = $ARGV[0];
+my $loop = AutoHarp::Model::Loop->load($id);
+my $handle = IO::String->new(decode_base64($loop->midi));
+my $opus = MIDI::Opus->new({'from_handle' => $handle});
+my $eventSet;
+
+if ($loop->isDrumLoop()) {
+  $eventSet = AutoHarp::Events::DrumTrack->fromOpus($opus);
+} else {
+  $eventSet = AutoHarp::Events::Melody->fromOpus($opus);
+}
+foreach my $e (@$eventSet) {
+  $e->dump();
+}
+exit(0);

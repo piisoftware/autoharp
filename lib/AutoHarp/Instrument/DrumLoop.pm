@@ -90,8 +90,12 @@ sub play {
     $loop = $self->selectLoop($segment);
     $self->{$LOOPS}{$tag} = $loop;
   }
+  my $base  = $loop->events();
+  if (!$base) {
+    print Dumper $loop;
+    confess "Unable to produce a drum track from loop";
+  }
   my $beat  = AutoHarp::Events::DrumTrack->new();
-  my $base  = $loop->track();
   my $t     = $beat->time($segment->time());
   my $start = $t;
   while ($beat->measures($clock) < $segment->measures()) {
@@ -122,9 +126,9 @@ sub play {
     #did I start playing just now? Can I find a pickup?
     my $pickup = $self->findLeadIn($segment);
     if ($pickup) {
-      my $pTrack = $pickup->track();
+      my $pTrack = $pickup->events();
       my $pMeas = $pTrack->measures($segment->music->clock);
-      if ($pMeas > 1 && (!$segment->isSongBeginning || often)) {
+      if ($pMeas > 1 && unlessPigsFly) {
 	$pTrack->time(0);
 	#cut this down to its last measure. Or 2.
 	my $diff = pickOne(1,1,1,2);
@@ -171,7 +175,7 @@ sub handleTransition {
   } elsif ($segment->transitionOutIsUp()) {
     my $f = $self->findFill($segment);
     if ($f) {
-      my $fill      = $f->track();
+      my $fill      = $f->events();
       my $measures  = $fill->measures($clock);
       if ($measures > 1 && unlessPigsFly) {
 	#just take the last measure or two of this
@@ -185,7 +189,7 @@ sub handleTransition {
       $beat->truncateToTime($fillStart);
       $beat->add($fill);
     }
-  } elsif ($loop->track()->measures($clock) != $segment->measures()) {
+  } elsif ($loop->events()->measures($clock) != $segment->measures()) {
     #straight transition, and this loop isn't naturally the same length 
     #as this segment. 
     #assume there's no transition there, and we need to create one
@@ -356,7 +360,6 @@ sub findLeadIn {
   my $segment = shift;
   return $self->findLoopBySegmentAndElement($segment, $SONG_ELEMENT_INTRO);
 }
-  
 
 "Loosen your ties";
 

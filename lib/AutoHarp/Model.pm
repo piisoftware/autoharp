@@ -207,7 +207,7 @@ sub delete {
 }
 
 sub getSession {
-  if (!$SESSION) {
+  if (!$SESSION || !$SESSION->ping) {
     my $dsn = "dbi:mysql:autoharp;host=localhost";
     eval {
       $SESSION = DBI->connect($dsn, AutoHarp::Config::DBUser(), AutoHarp::Config::DBPwd());
@@ -319,7 +319,7 @@ sub AUTOLOAD {
     }
     return $self->{$COLUMNS}{$method};
   }
-  print "Valid columns for " . ref($self) . ":\n";
+  printf "Valid columns for %s:\n",ref($self) || $self;
   print join("\n",@{$self->getColumnNames});
   print "\n";
   confess "Attempted to call unknown method $method on " . ref($self);

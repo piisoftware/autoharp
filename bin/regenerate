@@ -1,277 +1,58 @@
 #!/usr/bin/env perl
 use FindBin qw($Bin);
-use lib "$Bin/lib";
+use lib "$Bin/../lib";
 
-use AutoHarp::Generator;
-use AutoHarp::Events::Guide;
-use AutoHarp::Instrument;
-use AutoHarp::Constants;
-use AutoHarp::Conductor;
-use AutoHarp::Composer;
-use AutoHarp::Genre;
+use AutoHarp::Transcription;
+use AutoHarp::Model::Genre;
 use AutoHarp::Clock;
-use AutoHarp::Scale;
-use AutoHarp::Fuzzy;
-use AutoHarp::Config;
-
-use File::Copy;
-
-use JSON;
 use strict;
 
-my $file = $ARGV[0];
+
+my $file = shift(@ARGV);
 if (!$file) {
   die "usage: regenerate <json file>\n";
 }
-
-if (!-f $file) {
-  $file = AutoHarp::Config::DataFile($file);
-}
-
-my $fName = ($file =~ /(\w+)\.?\w*$/)[0];
-open(DATA, $file) or die "Couldn't find $file\n";
-my $str;
-while (<DATA>) {
-  $str .= $_;
-}
-close(DATA);
-my $ds;
-eval {
-  $ds = JSON->new->decode($str);
-}; 
-if ($@ || !$ds) {
-  die "Couldn't parse the content in $file into valid json ($@)\n";
-}
-my $gen   = AutoHarp::Generator->new();
-my $mData = $ds->{$ATTR_MUSIC} || {};
-my $music;
+my $gName = join(" ",@ARGV);
 my $genre;
-my $guide;
-while (my ($k,$v) = each %$mData) {
-  eval {
-    $music->{$k} = AutoHarp::MusicBox::Base->fromDataStructure($v);
-    $music->{$k}->tag($k);
-    if ($music->{$k}->hasProgression()) {
-      if (!$music->{$k}->hasMelody()) {
-	print "Adding a melody to $k\n";
-	$gen->melodize($music->{$k});
-      } 
-    } else {
-      if (!$music->{$k}->hasMelody()) {
-	print "Adding a melody to $k\n";
-	$gen->generateMelody($music->{$k});
-      } 
-      print "Harmonizing $k\n";
-      $gen->harmonize($music->{$k});
-    }
-    if (!$music->{$k}->genre()) {
-      $genre ||= AutoHarp::Genre->fromClock($music->{$k}->clock());
-      $music->{$k}->genre($genre);
-    } 
-    if (!$genre) {
-      $genre = $music->{$k}->genre();
-    }
-    $guide ||= $music->{$k}->guide()->clone();
-    #TODO--detect requested re-keyings?
-  };
-  if ($@) {
-    die "Couldn't reconstruct $k: $@\n";
-  }
-}
-my $hook;
-if ($ds->{$ATTR_HOOK}) {
-  eval {
-    $hook = AutoHarp::MusicBox::Hook->fromDataStructure($ds->{$ATTR_HOOK});
-  };
-  if ($@) {
-    die "Couldn't reconstruct hook: $@\n";
-  }
-  if (!$hook->hasMelody()) {
-    undef $hook;
+if ($gName) {
+  $genre = AutoHarp::Model::Genre->loadByName($gName);
+  if ($genre->isEmpty()) {
+    print "Genre $gName is unknown. Valid Genres:\n";
+    print join("\n",map {$_->name} @{AutoHarp::Model::Genre->all()});
+    print "\n";
+    exit(0);
   }
 }
 
-if (!$hook && !$guide) {
-  die "Got no source music of any kind. Can't regenerate";
-}
-
-my $source;
-if ($hook) {
-  my $bars;
-  if ($guide) {
-    $bars = $guide->measures();
-    $bars *= 2 while ($bars < 8);
-  } else {
-    $bars = 8;
-  }
-  $source  = $hook->clone();
-  $guide   = $hook->guide->clone();
-  $guide->measures($bars);
-  $genre ||= AutoHarp::Genre->fromClock($guide->clock());
-}
-
-foreach my $elt ($SONG_ELEMENT_VERSE,
-		 $SONG_ELEMENT_CHORUS,
-		 $SONG_ELEMENT_BRIDGE) {
-  if (!$music->{$elt}) {
-    print "Generating $elt\n";
-    $music->{$elt} = $gen->generateMusic($guide,$source);
-    $music->{$elt}->tag($elt);
-  } 
-  $source ||= $music->{$elt};
-}
-if (!$hook) {
-  print "Generating hook\n";
-  $hook = $gen->generateHook($source);
-}
-
-my $band = {};
-eval {
-  my @INSTS = ($ds->{$ATTR_INSTRUMENTS}) ? @{$ds->{$ATTR_INSTRUMENTS}} : ();
-  if (!scalar @INSTS) {
-    @INSTS = @{rebuildBand()};
-  }
-  foreach my $i (@INSTS) {
-    my $inst = AutoHarp::Instrument->fromString($i);
-    $band->{$inst->uid} = $inst;
-  }
-}; 
-if ($@ || !scalar keys %$band) {
-  die "Couldn't reconstruct the band, man. ($@)";
-}
-my $song;
-my $conductor = AutoHarp::Conductor->new();
-
-eval {
-  if (!$ds->{$ATTR_SONG}) {
-    my $composer = AutoHarp::Composer->new();
-    while (my ($k,$v) = each %$music) {
-      $composer->addMusic($v);
-    }
-    $composer->compose();
-    $song = $conductor->conduct({$ATTR_COMPOSITION => $composer->composition(),
-				 $ATTR_MUSIC => [values %$music],
-				 $ATTR_INSTRUMENTS => [values %$band],
-				 $ATTR_HOOK => $hook});
-  } else {
-    $song = $conductor->reconstructSong({$ATTR_SONG => $ds->{$ATTR_SONG},
-					 $ATTR_MUSIC => [values %$music],
-					 $ATTR_INSTRUMENTS => [values %$band],
-					 $ATTR_HOOK => $hook
-					}
-				       );
-  }
-};
-if ($@ || !$song) {
-  die "Couldn't rebuild the song ($@)";
-}
-
+my $transcription = AutoHarp::Transcription->regenerate($file,$genre);
 if (!$ENV{AUTOHARP_QUIET}) {
   print "export AUTOHARP_QUIET=fuckyes to be less verbose next time\n";
 }
-
-my $midiOut = AutoHarp::Config::MidiFile($fName);
-my $jsonOut = AutoHarp::Config::DataFile($fName);
-while (-f $midiOut || -f $jsonOut) {
-  if ($fName !~ /\d$/) {
-    $fName .= "1";
-  }
-  $fName++;
-  $midiOut = AutoHarp::Config::MidiFile($fName);
-  $jsonOut = AutoHarp::Config::DataFile($fName);
-}
-
-$song->out($midiOut);
-
-print "Genre is " . $genre->name . "\n";
-print "Song Settings: ";
-print AutoHarp::Notation::CreateHeader($ATTR_CLOCK => $guide->clock,
-				       $ATTR_SCALE => $guide->scale) . "\n";
-
-if ($band->{$DRUM_LOOP}) {
-  print "Loops used:\n";
-  foreach my $l (@{$band->{$DRUM_LOOP}->patterns}) {
-    printf "%6s: %s\n",$l->{$ATTR_TAG},$l->{$ATTR_FILE};
-  }
-}
-print "Midi file is $midiOut\n";
-eval {
-  my $m = {};
-  while (my ($t,$obj) = each %$music) {
-    #had this as a map statement and it was returning null keys 
-    #for no reason I could discern
-    $m->{$t} = $obj->toDataStructure();
-  }
-  my $outData ={ $ATTR_MUSIC => $m,,
-		 $ATTR_HOOK => $hook->toDataStructure(),
-		 $ATTR_INSTRUMENTS => [
-				       map {$_->toString()} 
-				       sort {$a->uid cmp $b->uid} 
-				       values %$band
-				      ],
-		 $ATTR_SONG => $song->toDataStructure()
-		};
-  open(FILE, ">$jsonOut") or die "Can't write to $jsonOut: $!\n";
-  print FILE JSON->new()->pretty()->canonical()->encode($outData);
-  close(FILE);
-  print "Data file is $jsonOut\n";
-};
-if ($@) {
-  print "Failed to export song to data: $@\n";
-} 
-
-if (!AutoHarp::Config::Play($song)) {
+my $midiOut = $transcription->MIDIOut();
+my $jsonOut = $transcription->JSONOut();
+my $sName   = $transcription->name();
+print "Writing transcription...\n";
+$transcription->write();
+print "Done\n";
+printf "MIDI file is %s\n",$transcription->MIDIOut();
+printf "JSON file is %s\n",$transcription->JSONOut();
+if (!AutoHarp::Config::Play($transcription->song)) {
   print "Set env var MIDI_PLAYER to a valid command-line midi player to play midi file\n";
 }
 
 print "Rename this session,\n";
 print "'x' to wipe it off the face of the earth,\n";
-print "($ARGV[0] will remain unmolested)\n";
-print "enter to accept '$fName'==> ";
-chomp(my $sName = <STDIN>);
-if (lc($sName) eq 'x') {
-  unlink($midiOut);
-  unlink($jsonOut);
-  print "$fName is no more. Its art has been deemed unworthy\n";
-} elsif ($sName) {
-  $sName =~ s/\.\w+$//;
-  my $toMidi = AutoHarp::Config::MidiFile($sName);
-  File::Copy::move($midiOut,$toMidi);
-  print "Session midi moved to $toMidi\n";
-  if (-f $jsonOut) {
-    my $toJson = AutoHarp::Config::DataFile($sName);
-    print "Session json moved to $toJson\n";
-    File::Copy::move($jsonOut,$toJson);
-  }
-
+print "($ARGV[0] will remain unmolested in all cases)\n";
+print "enter to accept '$sName'==> ";
+chomp(my $nName = <STDIN>);
+if (lc($nName) eq 'x') {
+  $transcription->nuke();
+  print "$nName is no more. Its art has been deemed unworthy\n";
+} elsif ($nName) {
+  $transcription->name($nName);
+  printf "Session MIDI moved to %s\n",$transcription->MIDIOut();
+  printf "Session JSON moved to %s\n",$transcription->JSONOut();
+  $transcription->like();
 }
 exit(0);
 
-exit(0);
-
-sub rebuildBand {
-  my $ret = [];
-  my @i = ($DRUM_LOOP,
-	   $BASS_INSTRUMENT,
-	   $RHYTHM_INSTRUMENT,
-	   $PAD_INSTRUMENT,
-	   $LEAD_INSTRUMENT,
-	   $HOOK_INSTRUMENT);
-  my $themes = pickOne(1,2,3);
-  for (1..$themes) {
-    push(@i, $THEME_INSTRUMENT);
-  }
-  my $tb = {};
-  foreach my $i (@i) {
-    my $inst = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $i); 
-    my $uid  = $i;
-    while (exists $tb->{$uid}) {
-      $uid .= "1" if ($uid !~ /\d+$/);
-      $uid++;
-    }
-    $inst->uid($uid);
-    $tb->{$uid}++;
-    push(@$ret, $inst->toString());
-  }
-  return $ret;
-}
