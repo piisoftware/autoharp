@@ -5,7 +5,7 @@ use strict;
 my $HOME            = $ENV{HOME} || $ENV{HOMEPATH};
 my $DS              = ($^O =~ /MSWin/) ? chr(92) : "/";
 my $INI_FILE        = "$HOME${DS}.autoharp-config";
-my $DB_ROOT         = $ENV{AUTOHARP_DB_ROOT} || "$Bin${DS}db";
+my $DB_ROOT         = $ENV{AUTOHARP_DB_ROOT} || "$Bin${DS}..${DS}db";
 my $GENRE_DB_ROOT   = "$DB_ROOT${DS}genres";
 my $GENRE_FILE_ROOT = "$DB_ROOT${DS}loops";
 

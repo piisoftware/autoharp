@@ -6,12 +6,11 @@ use Carp;
 use strict;
 use Cwd;
 
-my $dir = "$Bin/tests";
-my $lib = "$Bin/lib";
+my $dir = "$Bin/../tests";
+my $lib = "$Bin/../lib";
 
 
 my $harness = TAP::Harness->new({verbosity => 1, lib => [$lib]});
-$ENV{AUTOHARP_DB_ROOT} = "$Bin/db";
 
 my $testsToRun = join(" ",@ARGV);
 my $failures;
