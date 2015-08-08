@@ -388,12 +388,6 @@ sub setClock {
 	$self->removeType($EVENT_TIME_SIGNATURE,$when);
 	$self->add($clock->meter2MidiEvent($when));
       }
-      if ($clock->swingPct != $cClock->swingPct || 
-	  $clock->swingNote ne $cClock->swingNote) {
-	my $re = $cClock->swing2MidiEvent($when);
-	$self->removeAtTime($re);
-	$self->add($clock->swing2MidiEvent($when));
-      }
     } 
   } 
 }
@@ -466,12 +460,11 @@ sub scaleAt {
   return AutoHarp::Scale->fromMidiEvent($keyEvent);
 }
 
-#returns what the clock (tempo/meter/swing) are at this time
+#returns what the clock (tempo/meter) are at this time
 sub clockAt {
   my $self = shift;
   my $time = shift;
   my $tempoEvent;
-  my $swingEvent;
   my $clockTime = $self->time;
   my $meterEvent = AutoHarp::Clock->new()->meter2MidiEvent($clockTime);
   if ($time >= $clockTime) {
@@ -481,8 +474,6 @@ sub clockAt {
 	  $tempoEvent = $e;
 	} elsif ($e->isMeter()) {
 	  $meterEvent = $e;
-	} elsif ($e->isSwing()) {
-	  $swingEvent = $e;
 	}
       } else {
 	last;
@@ -490,8 +481,7 @@ sub clockAt {
     }
   }
   return AutoHarp::Clock->fromClockEvents($meterEvent,
-					  $tempoEvent,
-					  $swingEvent
+					  $tempoEvent
 					 );
 }
 
@@ -526,23 +516,6 @@ sub hasTimeChange {
   my $self  = shift;
   my $t     = $self->time();
   return scalar grep {$_->isClock() && $_->time > $t} @$self;
-}
-
-
-sub setSwingFromMelody {
-  my $self  = shift;
-  my $track = shift;
-  #let the initial clock gauge the swing from this melody
-  my $clock = $self->clock();
-  my $s = $clock->detectSwing($track);
-  return $self->swing($s);
-}
-
-sub addSwing {
-  my $self = shift;
-  if ($self->clock->hasSwing()) {
-    return $self->clock->addSwing(shift);
-  }
 }
 
 #return a simple click track for this guide

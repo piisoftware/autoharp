@@ -50,9 +50,6 @@ use Readonly;
 	      $ATTR_STRAIGHT_TRANSITION
 	      $ATTR_UP_TRANSITION
 	      $ATTR_DOWN_TRANSITION
-	      $ATTR_SWING
-	      $ATTR_SWING_NOTE
-	      $ATTR_SWING_PCT
 	      $ATTR_TAG
 	      $ATTR_TEMPO
 	      $ATTR_TIME
@@ -205,9 +202,6 @@ Readonly::Scalar $ATTR_START_TIME          => 'startTime';
 Readonly::Scalar $ATTR_STRAIGHT_TRANSITION => 'straight';
 Readonly::Scalar $ATTR_UP_TRANSITION       => 'up';
 Readonly::Scalar $ATTR_DOWN_TRANSITION     => 'down';
-Readonly::Scalar $ATTR_SWING               => 'swing';
-Readonly::Scalar $ATTR_SWING_NOTE          => 'swingNote';
-Readonly::Scalar $ATTR_SWING_PCT           => 'swingPercentage';
 Readonly::Scalar $ATTR_TAG                 => 'tag';
 Readonly::Scalar $ATTR_TEMPO               => 'tempo';
 Readonly::Scalar $ATTR_TIME                => 'time';

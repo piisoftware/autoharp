@@ -120,25 +120,34 @@ sub matchesTempo {
 }
 
 sub events {
+  my $self = shift;
+  my $data = $self->eventSet(@_);
+  return ($data) ? $data->[1] : undef;
+}
+
+sub guide {
+  my $self = shift;
+  my $data = $self->eventSet(@_);
+  return ($data) ? $data->[0] : undef;
+}
+
+sub eventSet {
   my $self    = shift;
   my $verbose = shift;
-  my $events;
+  my $eventSet;
   eval {
     my $handle = IO::String->new(decode_base64($self->midi));
     my $opus = MIDI::Opus->new({'from_handle' => $handle});
-    my $eventSet;
     if ($self->isDrumLoop()) {
       $eventSet = AutoHarp::Events::DrumTrack->fromOpus($opus);
     } else {
       $eventSet = AutoHarp::Events::Melody->fromOpus($opus);
     }
-    $events = $eventSet->[1];
   };
   if ($@ && $verbose) {
     print "Couldn't generate events from loop: $@";
-
   }
-  return $events;
+  return $eventSet;
 }
 
 #get the clock from this loop's metadata

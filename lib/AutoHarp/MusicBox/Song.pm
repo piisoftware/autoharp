@@ -239,10 +239,8 @@ sub scores {
       if (!$sHash->{$instId}) {
 	my $p = AutoHarp::Events::Performance->new($performance);
 	$self->initChannel($p,$inst,$mix);
-	#$segment->music->clock()->addSwing($p);
 	$sHash->{$instId} = $p;
       } else {
-	#$segment->music->clock()->addSwing($performance);
 	$sHash->{$instId}->add($performance);
 	if ($sHash->{$instId}->soundingTime < 0) {
 	  $performance->dump();

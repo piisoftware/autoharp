@@ -162,8 +162,7 @@ sub isScale {
 sub isClock {
   my $self = shift;
   return ($self->isTempo() ||
-	  $self->isMeter() ||
-	  $self->isSwing());
+	  $self->isMeter());
 }
 
 sub isTempo {
@@ -174,10 +173,6 @@ sub isMeter {
   return ($_[0]->type eq $EVENT_TIME_SIGNATURE);
 }
 
-sub isSwing {
-  return ($_[0]->isText() && $_[0]->text() =~ /$ATTR_SWING/);
-}
-  
 sub isGenre {
   return ($_[0]->isText() && $_[0]->text() =~ /$ATTR_GENRE/);
 }

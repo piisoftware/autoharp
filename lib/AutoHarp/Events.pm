@@ -76,6 +76,8 @@ sub fromOpus {
   $guide->setEnd($endTime);
   my $retTracks = [$guide];
   foreach my $t (@$tracks) {
+    #add a zero event to each track using the zero-time of the guide
+    unshift(@$t, AutoHarp::Event->zeroEvent($guide->time));
     my $to = $class->new($t);
     push(@$retTracks,$to) if ($to->duration > 0);
   }
@@ -617,27 +619,25 @@ sub transcribe {
   my $cGuide = $guide->clone();
   #whack off any intro (notes before the 0 of this track)
   #Later we might decide to save them. TODO: That?
-  my $bars   = $self->measures($guide->clock);
   my $cTrack = $self->subList($self->time,$self->reach());
-  my $clorge = $cTrack->clone();
+  my $bars   = $cTrack->measures($guide->clock);
   $cGuide->time(0);
   $cTrack->time(0);
-  my $clodge = $cTrack->clone();
   my $op   = MIDI::Opus->new({format => 1,
 			      ticks => $TICKS_PER_BEAT,
 			      tracks => [$cGuide->track, $cTrack->track]
 			     });
   my $loop = AutoHarp::Model::Loop->fromOpus($op);
   if ($loop->events()->measures($guide->clock) != $bars) {
-    print "WAS\n";
+    print "ORIGINAL:\n";
     $self->dump();
-    print "\nGOT\n";
-    $loop->events()->dump();
-    print "\nALSO\n";
-    $clorge->dump();
-    print "\nAND THEN\n";
-    $clodge->dump();
-    
+    print "FROM-ZERO TRACK:\n";
+    $cTrack->dump();
+    print "\nRESULTING OPUS\n";
+    foreach my $e (@{$loop->eventSet()}) {
+      $e->dump();
+      print "\n";
+    }
     confess sprintf "Writing a %d measure events resulted in a %d measure loop",
       $bars,
 	$loop->events()->measures($guide->clock);

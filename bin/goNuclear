@@ -5,10 +5,7 @@ use lib "$Bin/../lib";
 use strict;
 use AutoHarp::Constants;
 use AutoHarp::Model::Loop;
-use AutoHarp::Model::Genre;
 use AutoHarp::Model::LoopGenre;
-use AutoHarp::Model::LoopFeedback;
-use AutoHarp::Model::LoopAttribute;
 
 print "Really??? ";
 chomp(my $resp = <STDIN>);
@@ -20,11 +17,11 @@ print "GOING NUCLEAR.\n";
 my $g = AutoHarp::Model::Genre->loadByName($ATTR_MACHINE_GENRE);
 foreach my $lg (@{AutoHarp::Model::LoopGenre->all({genre_id => $g->id})}) {
   my $l = AutoHarp::Model::Loop->load($lg->loop_id);
-  if (scalar @{$l->genres()} == 1) {
-    printf "Nuking $ATTR_MACHINE_GENRE-only loop %d\n",$loop->id;
+  if ($l->isMachined()) {
+    printf "Nuking machined loop %d\n",$loop->id;
     $l->delete();
   } else {
-    printf "Keeping loop %d because it belongs to other genres\n",$loop->id;
+    printf "Keeping non-machined loop %d because it belongs to other genres\n",$loop->id;
   }
 }
 

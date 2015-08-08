@@ -276,6 +276,7 @@ sub write {
       if ($inst->is($THEME_INSTRUMENT) 
 	  || $inst->is($LEAD_INSTRUMENT)
 	  || $inst->is($HOOK_INSTRUMENT)
+	  || $inst->is($RHYTHM_INSTRUMENT)
 	  || $inst->isDrums()) {
 	my $loop = $play->transcribe($guide);
 	$loop->type(($inst->isDrums()) ? $DRUM_LOOP : $inst->instrumentClass());

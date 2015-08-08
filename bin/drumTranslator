@@ -3,50 +3,62 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
 use strict;
+use AutoHarp::Model::Loop;
 use AutoHarp::Events::DrumTrack;
-use AutoHarp::MusicBox::Base; 
 use AutoHarp::Constants;
 use AutoHarp::Config;
-use AutoHarp::Genre;
-use File::Copy;
 use MIDI;
-use JSON;
 
-my $resultDir = $ARGV[0];
-if ($resultDir && -d $resultDir) {
-  #do something, then exit
+my $resultFile = $ARGV[0];
+if ($resultFile && -f $resultFile) {
+  open(FILE, $resultFile) or die "Can't open $resultFile: $!\n";
+  my $events = AutoHarp::Events::DrumTrack->new();
+  while(<FILE>) {
+    if ($_ =~ /note/) {
+      chomp();
+      my $e = AutoHarp::Event::Note->fromTextLine($_);
+      $events->add($e);
+    } elsif (/marker/ && $events->duration() > 0) {
+      $events->repeat(); 
+      $events->repeat();
+      my $opus = MIDI::Opus->new({tracks => [$events->track()],
+				  ticks => $TICKS_PER_BEAT,
+				  format => 1});
+      AutoHarp::Config::PlayOpus($opus);
+      $events = AutoHarp::Events::DrumTrack->new();
+      print "Enter to continue";
+      <STDIN>
+    }
+  }
+
   exit(0);
 }
 
-my $outputDir = "$ENV{HOME}/rnn";
+my $outputDir = "$ENV{HOME}/workspace/char-rnn/data/autoharp_two";
 if (!-d $outputDir) {
   mkdir($outputDir);
 }
 
-foreach my $Genre (@{AutoHarp::Genre::Genres()}) {
-  foreach my $pattern (@{$Genre->getPatterns}) {
-    my $file = $pattern->{$ATTR_FILE};
-    my $loop;
-    eval {
-      $loop = AutoHarp::Events::DrumTrack->fromFile($file);
-    };
-    if ($@ || !$loop) {
-      print "Skipping $pattern->{$ATTR_FILE}, got no loop: $@\n";
-      next;
-    }
-    my $clock    = AutoHarp::Clock->new(%$pattern);
-    my $base     = AutoHarp::MusicBox::Base->new($ATTR_CLOCK => $clock);
-    my $measures = $loop->measures($clock);
-    $base->measures($measures);
-    $base->melody($loop);
-    $base->measures(4);
-    my $fileName = $file;
-    $fileName =~ s/\W//g;
-    if (-e "$outputDir/$fileName") {
-      die "DAMMIT: $fileName";
-    }
-    $base->melody->toTextFile("$outputDir/$fileName");
+open(FILE, ">$outputDir/input.txt");
+foreach my $loop (@{AutoHarp::Model::Loop->all({type => $DRUM_LOOP})}) {
+  my $buckets = $loop->getBuckets();
+  my $genres  = $loop->genres();
+  my $elts    = $loop->getSongElements();
+  my $events  = $loop->events();
+  foreach my $g (@$genres) {
+    printf FILE "%s: %s\n",$ATTR_GENRE,$g->name;
+  }
+  foreach my $b (@$buckets) {
+    printf FILE "%s: %s\n",$ATTR_BUCKET,$b;
+  }
+  foreach my $e (@$elts) {
+    printf FILE "%s: %s\n",$SONG_ELEMENT,$e;
+  }
+  printf FILE "%s: %s\n",$ATTR_METER,$loop->meter;
+  foreach my $e (@$events) {
+    printf FILE "%s\n",$e->toTextLine();
   }
 }
+close(FILE);
 
 exit(0);

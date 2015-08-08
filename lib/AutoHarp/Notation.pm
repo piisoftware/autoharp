@@ -53,8 +53,6 @@ sub CreateHeader {
   if ($clock) {
     push(@s, sprintf("$ATTR_METER: %s",$clock->meter()));
     push(@s, sprintf("$ATTR_TEMPO: %d",$clock->tempo()));
-    push(@s, sprintf("$ATTR_SWING_PCT: %d",$clock->swingPct()));
-    push(@s, sprintf("$ATTR_SWING_NOTE: %s",$clock->swingNote()));
   }
   if ($scale) {
     push(@s, sprintf("$ATTR_KEY: %s",$scale->key()));

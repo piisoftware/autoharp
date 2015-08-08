@@ -202,9 +202,6 @@ sub track {
     $obj->setPatch($args->{$ATTR_PATCH});
     $obj->setPan($args->{$ATTR_PAN});
     $obj->setVolume($args->{$ATTR_VOLUME});
-    if ($args->{$ATTR_GUIDE}) {
-      $args->{$ATTR_GUIDE}->addSwing($obj);
-    }
   }
   return MIDI::Track->new({ 'events' => $obj->export});
 }

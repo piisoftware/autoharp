@@ -1,0 +1,12 @@
+#!/usr/bin/perl
+
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+use AutoHarp::Config;
+
+my $file = $ARGV[0];
+my $mp3 = $file;
+$mp3 =~ s/\.\w+$/.mp3/;
+my $p = AutoHarp::Config::Player();
+exit(system("$p $file -Ow -o - | lame - -b 64 $mp3"));
+
