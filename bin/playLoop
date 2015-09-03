@@ -1,0 +1,20 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Model::Loop;
+use AutoHarp::Config;
+use AutoHarp::Constants;
+
+my $loop_id = $ARGV[0];
+my $loop = AutoHarp::Model::Loop->load($loop_id);
+$loop->events()->dump();
+foreach my $g (@{$loop->genres()}) {
+    printf "%s: %s\n",$ATTR_GENRE,$g->name;
+}
+foreach my $a (@{$loop->getAttributes()}) {
+    printf "%s: %s\n",$a->attribute(),$a->value();
+}
+AutoHarp::Config::PlayOpus($loop->toOpus);
+exit(0);

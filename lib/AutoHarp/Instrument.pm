@@ -297,6 +297,37 @@ sub play {
   confess "WHAT ARE YOU ASKING ME FOR? SERIOUSLY, I AM SERIOUSLY DUMB";
 }
 
+sub playLoop {
+  my $self = shift;
+  my $segment = shift;
+  my $loop = shift;
+  
+  my $play = $loop->events();
+  if (!$play->duration()) {
+    $loop->dump();
+    confess "Loop id " . $loop->id . " produced 0 duration MIDI events";
+  }
+  $play->time($segment->time);
+  my $c = $segment->music->clock();
+  if ($play->measures($c) > $segment->measures()) {
+    $play->truncateToTime($segment->music->guide->reach());
+    #     confess sprintf "PLAY MEASURES for %d is %d, segment measures %d, wtf?\n",
+#       $loop->id,
+# 	$play->measures($c),
+# 	  $segment->measures();
+  }
+  while ($play->measures($c) <= int($segment->measures() / 2)) {
+    printf "PLAY MEASURES for %d is %d, segment measures %d, repeating\n",
+      $loop->id,
+	$play->measures($c),
+	  $segment->measures();
+    #repeat this loop if there's room
+    my $rDur = $play->measures($c) * $c->measureTime(); 
+    $play->repeat($rDur);
+  }
+  return $play;
+}
+
 sub transition {
   my $self    = shift;
   my $segment = shift;

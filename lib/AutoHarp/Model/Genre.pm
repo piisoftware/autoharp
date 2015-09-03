@@ -62,7 +62,8 @@ sub getLoops {
   if ($type) {
     $args->{type} = $type;
   }
-  return AutoHarp::Model::Loop->all($args);
+  return [map {AutoHarp::Model::Loop->load($_->{loop_id})}
+	  @{AutoHarp::Model::LoopGenres->all($args)}];
 }
 
 sub getDrumLoops {

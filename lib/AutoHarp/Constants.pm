@@ -65,6 +65,8 @@ use Readonly;
 	      $DEFAULT_ROOT_PITCH
 	      $DRUM_KIT
 	      $DRUM_LOOP
+	      $DEEP_DRUM_LOOP
+	      $GENERATED_DRUM_LOOP
 	      $DRUM_RESOLUTION
 	      $EVENT_CHANNEL_AFTERTOUCH
 	      $EVENT_CHORD
@@ -89,6 +91,9 @@ use Readonly;
 	      $PAD_INSTRUMENT
 	      $RHYTHM_INSTRUMENT
 	      $THEME_INSTRUMENT
+	      $TRAINING_CHAOS
+	      $TRAINING_EPOCH
+	      $TRAINING_LOSS
 	      $MAJOR_SCALE_INTERVALS
 	      $MAX_TEMPO_BPM
 	      $MUSIC_BOX
@@ -146,6 +151,9 @@ Readonly::Scalar $MAJOR_SCALE_INTERVALS    => [2,2,1,2,2,2,1];
 Readonly::Scalar $MAX_TEMPO_BPM            => 500;
 Readonly::Scalar $TICK_LENGTH              => 'length';
 Readonly::Scalar $TICKS_PER_BEAT           => 240;
+Readonly::Scalar $TRAINING_CHAOS           => 'training_chaos';
+Readonly::Scalar $TRAINING_EPOCH           => 'training_epoch';
+Readonly::Scalar $TRAINING_LOSS            => 'training_loss';
 Readonly::Scalar $NOTE_MINIMUM_TICKS       => $TICKS_PER_BEAT / 4; #16th in 4/4
 
 Readonly::Scalar $ATTR_AUTOHARP_SONG       => 'AutoHarpSong';
@@ -162,6 +170,8 @@ Readonly::Scalar $ATTR_COMPOSITION         => 'composition';
 Readonly::Scalar $ATTR_DIRECTORY           => 'directory';
 Readonly::Scalar $DRUM_KIT                 => 'drumKit';
 Readonly::Scalar $DRUM_LOOP                => 'drumLoop';
+Readonly::Scalar $DEEP_DRUM_LOOP           => 'deepDrumLoop';
+Readonly::Scalar $GENERATED_DRUM_LOOP      => 'generatedDrumLoop';
 Readonly::Scalar $DRUM_RESOLUTION          => $TICKS_PER_BEAT / 8; #32nds
 Readonly::Scalar $ATTR_DURATION            => 'duration';
 Readonly::Scalar $ATTR_EFFECTS             => 'effects';

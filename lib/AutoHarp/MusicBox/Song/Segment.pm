@@ -15,9 +15,6 @@ my $HALF          = 'half';
 my $FIRST_HALF    = 'firstHalf';
 my $SECOND_HALF   = 'secondHalf';
 
-my $ATTR_UP_TRANSITION            = 'up';
-my $ATTR_DOWN_TRANSITION          = 'down';
-
 sub toDataStructure {
   my $self = shift;
   if ($self->hasPerformances() && !$self->hasMusic()) {

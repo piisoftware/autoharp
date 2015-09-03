@@ -3,60 +3,159 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
 use strict;
+use AutoHarp::Model;
 use AutoHarp::Model::Loop;
 use AutoHarp::Events::DrumTrack;
+use AutoHarp::Events::Guide;
+use AutoHarp::Clock;
+use Date::Format;
+use AutoHarp::Instrument::DrumLoop;
+use AutoHarp::MusicBox::Song::Segment;
 use AutoHarp::Constants;
 use AutoHarp::Config;
 use MIDI;
+use Cwd;
 
-my $resultFile = $ARGV[0];
-if ($resultFile && -f $resultFile) {
-  open(FILE, $resultFile) or die "Can't open $resultFile: $!\n";
-  my $events = AutoHarp::Events::DrumTrack->new();
-  while(<FILE>) {
-    if ($_ =~ /note/) {
-      chomp();
-      my $e = AutoHarp::Event::Note->fromTextLine($_);
-      $events->add($e);
-    } elsif (/marker/ && $events->duration() > 0) {
-      $events->repeat(); 
-      $events->repeat();
-      my $opus = MIDI::Opus->new({tracks => [$events->track()],
-				  ticks => $TICKS_PER_BEAT,
-				  format => 1});
-      AutoHarp::Config::PlayOpus($opus);
-      $events = AutoHarp::Events::DrumTrack->new();
-      print "Enter to continue";
-      <STDIN>
-    }
+my $LOOP_BARS = 4;
+my $MAX_SKIPS = 5;
+my $RNN_DIR = "/Users/marz/workplace/char-rnn";
+my $ARCHIVE_ROOT = "/Users/marz/workplace/rnn-output";
+
+my $OUTPUT_CMD = "th sample.lua -gpuid -1 -primetext meter";
+my $TMP_FILE = "/tmp/thOutput";
+my $ITERATION = 'seven';
+
+my $batchName = $ARGV[0];
+if ($batchName) {
+  if ($batchName !~ /^\d{8}/) {
+    $batchName = Date::Format::time2str("%Y%m%d",time()) . "$batchName";
+  }
+  my $targetDir = "$ARCHIVE_ROOT/$batchName";
+  my $MachineGenre = AutoHarp::Model::Genre->loadByName($ATTR_MACHINE_GENRE);
+  if (!-d $targetDir) {
+    mkdir($targetDir) or die "NO $targetDir: $!\n";
+    system("mv $RNN_DIR/cv/* $targetDir");
   }
 
+  my $was = getcwd();
+  chdir($RNN_DIR);
+
+  opendir(TARGET, $targetDir) or die "REALLY, NO: $!\n";
+  foreach my $f (grep {/\w/} readdir(TARGET)) {
+    my $sampleFile = "$targetDir/$f";
+    my $chaos = 0;
+    my ($epoch, $loss) = ($f =~ /epoch(\d+\.\d+_\d+)\.(\d+)/);
+    my $tmpFile = $TMP_FILE . $epoch;
+    if (system("$OUTPUT_CMD $sampleFile > $tmpFile") || !(-f $tmpFile)) {
+      die "Failed to export $f: $!\n";
+    }
+    open(RESULT, $tmpFile) or die "Can't open $tmpFile: $!\n";
+    my $events = AutoHarp::Events::DrumTrack->new();
+    my $sawZero;
+    my $tempo;
+    my $bar;
+    my $nextTime = 0;
+    my $skipCheck = $MAX_SKIPS;
+    my $on;
+    while(<RESULT>) {
+      chomp();
+      if (/----/) {
+	$on = 1;
+	next;
+      } 
+      if (/tempo (\d+), bar (\d+)/) {
+	if ($events->duration) {
+	  $chaos++;
+	}
+	$tempo ||= $1;
+	$bar ||= $2;
+      } elsif ($_ =~ /timeZero/) {
+	if ($sawZero++) {
+	  print "Saw a second time zero, aborting\n";
+	  last;
+	}
+      } elsif (/^note/) {
+	eval {
+	  my $e = AutoHarp::Event::Note->fromTextLine($_);
+	  $e->duration($DRUM_RESOLUTION);
+	  $events->add($e);
+	  if ($e->time < $nextTime) {
+	    $chaos++;
+	  }
+	  $nextTime = $e->time;
+	};
+	if ($@) {
+	  print "Skipping $_: $@\n";
+	  $chaos++;
+	}
+      } else {
+	$chaos++ if ($on);
+	#ignoring
+      }
+    }
+    close(RESULT);
+    $bar ||= 1;
+    my $guide = AutoHarp::Events::Guide->new();
+    my $measures = $events->measures($guide->clock());
+    $guide->measures($measures);
+    $events->truncateToTime($guide->reach());
+    $events->dump();
+    my $opus = MIDI::Opus->new({tracks => [$guide->track(), $events->track()],
+				ticks => $TICKS_PER_BEAT,
+				format => 1});
+    my $loop = AutoHarp::Model::Loop->fromOpus($opus);
+    $loop->type($DEEP_DRUM_LOOP);
+    $loop->save();
+    $loop->addToGenre($MachineGenre);
+    $loop->addAttribute($ATTR_BUCKET, $batchName);
+    $loop->addAttribute($TRAINING_EPOCH, $epoch);
+    $loop->addAttribute($TRAINING_CHAOS, $chaos);
+    $loop->addAttribute('bar',$bar);
+  }
+  chdir($was);
   exit(0);
 }
 
-my $outputDir = "$ENV{HOME}/workspace/char-rnn/data/autoharp_two";
+
+my $outputDir = "$ENV{HOME}/workplace/char-rnn/data/autoharp_$ITERATION";
 if (!-d $outputDir) {
   mkdir($outputDir);
 }
 
+my $testBucket = 'GrooveMonkey';
+my $testGenre  = 'Rock';
+
 open(FILE, ">$outputDir/input.txt");
-foreach my $loop (@{AutoHarp::Model::Loop->all({type => $DRUM_LOOP})}) {
-  my $buckets = $loop->getBuckets();
-  my $genres  = $loop->genres();
-  my $elts    = $loop->getSongElements();
-  my $events  = $loop->events();
-  foreach my $g (@$genres) {
-    printf FILE "%s: %s\n",$ATTR_GENRE,$g->name;
-  }
-  foreach my $b (@$buckets) {
-    printf FILE "%s: %s\n",$ATTR_BUCKET,$b;
-  }
-  foreach my $e (@$elts) {
-    printf FILE "%s: %s\n",$SONG_ELEMENT,$e;
-  }
-  printf FILE "%s: %s\n",$ATTR_METER,$loop->meter;
-  foreach my $e (@$events) {
-    printf FILE "%s\n",$e->toTextLine();
+my $set = AutoHarp::Model::Select
+  (
+   "select la.loop_id from loop_attributes la, loop_genres lg, genres g " .
+   "where g.name = '$testGenre' ".
+   "and g.id = lg.genre_id " .
+   "and lg.loop_id = la.loop_id " .
+   "and la.attribute = 'bucket' " .
+   "and la.value = '$testBucket'");
+
+foreach my $row (@$set) {
+  my $loop = AutoHarp::Model::Loop->load($row->{loop_id});
+  next if ($loop->meter ne '4/4');
+  my $events = $loop->events();
+  my $guide   = $loop->guide();
+  my $measures = $guide->eachMeasure();
+  for (my $i = 0; $i < scalar @$measures; $i++) {
+    printf FILE "tempo %d, bar %d\n",$guide->clock->tempo,$i + 1;
+    my $m = $measures->[$i];
+    my $n = $m + $guide->clockAt($m)->measureTime();
+    eval {
+      my $sub = $events->subList($m,$n);
+      $sub->time(0);
+      foreach my $e (@$sub) {
+	printf FILE "%s\n",$e->toTextLine();
+      }
+    };
+    if ($@) {
+      $events->dump();
+      die "WTF, " . $loop->id() . "?";
+    }
   }
 }
 close(FILE);

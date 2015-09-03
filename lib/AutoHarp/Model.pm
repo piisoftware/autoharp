@@ -17,12 +17,12 @@ my $COLUMNS = 'columns';
 my $COLUMN_NAME_MEMO = {};
 
 sub Select {
-  my $class     = shift;
   my $statement = shift;
   my $failSilently = shift;
   my $rows = [];
   eval {
-    my $h = getSession->prepare($statement);
+    my $h = getSession()->prepare($statement);
+    $h->execute();
     my $r;
     while ($r = $h->fetchrow_hashref()) {
       push(@$rows, $r);
@@ -139,6 +139,7 @@ sub update {
   my $u = "update " . $self->tableName() . " set ";
   while (my ($k,$v) = each %{$self->{$COLUMNS}}) {
     next if ($k eq $pk);
+    $v =~ s/\'//g;
     $v = "'$v'" unless ($v =~ /^\d+$/);
     $u .= " $k = $v,";
   }
@@ -164,6 +165,7 @@ sub insert {
   while (my ($k,$v) = each %{$self->{$COLUMNS}}) {
     next if ($k eq $pk);
     $columns .= "$k,";
+    $v =~ s/\'//g;
     if ($v =~ /^\d+$/) {
       $values .= "$v,";
     } else {
@@ -282,6 +284,7 @@ sub _select {
   my $statement = "select * from " . $class->tableName();
   my $and = "where";
   while (my ($k,$v) = each %$args) {
+    $v =~ s/\'//g;
     if ($v !~ /^\d+$/) {
       $v = "'$v'";
     }

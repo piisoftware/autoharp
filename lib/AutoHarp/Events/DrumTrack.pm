@@ -29,7 +29,6 @@ sub fromFile {
       if ($h->isPercussion()) {
 	$h->duration($DRUM_RESOLUTION);
       }
-      #add them to this track, provided they don't collide
       $track->add($h);
     }
   }
@@ -110,7 +109,7 @@ sub split {
   my $tracks   = [];
   my $drumRef  = {};
   foreach my $m (@{$self->notes()}) {
-    my $d = $MIDI::notenum2percussion{$m->pitch};
+    my $d = $m->pitch; #$MIDI::notenum2percussion{$m->pitch};
     if (!$drumRef->{$d}) {
       $drumRef->{$d} = AutoHarp::Events::DrumTrack->new();
       $drumRef->{$d}->time($self->time);
@@ -235,11 +234,16 @@ sub eventCanBeAdded {
   my $event = shift;
   if ($event->isNote()) {
     if (!$event->drum) {
-      confess sprintf("Attempted to add non-drum note %s to drum track",$event->pitch);
+      #don't want non-drums
+      return;
+      #confess sprintf("Attempted to add non-drum note %s to drum track",$event->pitch);
     } elsif ($self->hasHitAtTime($event)) {
       #no double-hitting
       return;
     }
+  } elsif ($event->isMusic) {
+    #no expression or aftertouch is really relevant to us
+    return;
   }
   return $self->SUPER::eventCanBeAdded($event);
 }

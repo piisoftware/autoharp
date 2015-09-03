@@ -6,22 +6,44 @@ use strict;
 use AutoHarp::Constants;
 use AutoHarp::Model::Loop;
 use AutoHarp::Model::LoopGenre;
+use AutoHarp::Model::LoopAttribute;
 
-print "Really??? ";
+my $bucket = $ARGV[0];
+
+if ($bucket) {
+  print "Nuke everything in $bucket? ";
+} else {
+  print "Nuke EVERYTHING machined?? ";
+}
+
 chomp(my $resp = <STDIN>);
 if ($resp !~ /^y/i) {
   print "Okay. NOT DOING THIS.\n";
   exit(0);
 }
-print "GOING NUCLEAR.\n";
+print "GOING NUCLEAR";
+if ($bucket) {
+  print " ON $bucket";
+}
+print "\n";
+if ($bucket) {
+  my $all = AutoHarp::Model::LoopAttribute->loadByAttributeValue($ATTR_BUCKET, $bucket);
+  foreach my $la (@$all) {
+    my $l = AutoHarp::Model::Loop->load($la->loop_id);
+    printf "Nuking %d, %s\n",$l->id,$l->type;
+    $l->delete();
+  }
+  exit(0);
+}
+
 my $g = AutoHarp::Model::Genre->loadByName($ATTR_MACHINE_GENRE);
 foreach my $lg (@{AutoHarp::Model::LoopGenre->all({genre_id => $g->id})}) {
   my $l = AutoHarp::Model::Loop->load($lg->loop_id);
   if ($l->isMachined()) {
-    printf "Nuking machined loop %d\n",$loop->id;
+    printf "Nuking machined loop %d of type %s\n",$l->id,$l->type;
     $l->delete();
   } else {
-    printf "Keeping non-machined loop %d because it belongs to other genres\n",$loop->id;
+    printf "Keeping non-machined loop %d because it belongs to other genres\n",$l->id;
   }
 }
 

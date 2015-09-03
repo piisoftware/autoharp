@@ -43,7 +43,7 @@ sub fromFile {
     return;
   }
   if (scalar @$events > 2) {
-    print "file contains more than one track, ignoring" if ($verbose);
+    print "file contains more than one track, ignoring\n" if ($verbose);
     return;
   }
   
@@ -57,8 +57,7 @@ sub fromFile {
     $buf .= $data;
   }
   close(MIDI);
-  my $self = $class->new({bars => $guide->bars(),
-			  meter => $guide->clock->meter(),
+  my $self = $class->new({meter => $guide->clock->meter(),
 			  tempo => $guide->clock->tempo(),
 			  scale => $guide->scale->key(),
 			  midi => encode_base64($buf),
@@ -103,7 +102,6 @@ sub fromOpus {
   $loop->meter($guide->clock->meter);
   $loop->tempo($guide->clock->tempo);
   $loop->scale($guide->scale->key);
-  $loop->bars($guide->measures());
   $loop->midi(encode_base64($midiBuffer));
   return $loop;
 }
@@ -129,6 +127,47 @@ sub guide {
   my $self = shift;
   my $data = $self->eventSet(@_);
   return ($data) ? $data->[0] : undef;
+}
+
+sub bars {
+  my $self = shift;
+  my $val  = shift;
+  my $eSet = $self->eventSet();
+  my $curr = $eSet->[0]->bars();
+  if (length($val) && $val != $curr) {
+    $eSet->[0]->bars($val);
+    $eSet->[1]->truncateToTime($eSet->[0]->reach());
+    my $opus = MIDI::Opus->new({tracks => [map {$_->track} @$eSet],
+				ticks => $TICKS_PER_BEAT,
+				format => 1});
+    my $truncated = ref($self)->fromOpus($opus);
+    $self->midi($truncated->midi);
+    $curr = $val;
+  } 
+  return $curr;
+}
+
+sub toOpus {
+  my $self = shift;
+  my $handle = IO::String->new(decode_base64($self->midi));
+  return MIDI::Opus->new({'from_handle' => $handle});
+}
+
+#some loops come in as channel 0, even if they are meant to be drums
+sub toDrumLoop {
+  my $self = shift;
+  if ($self->isDrumLoop()) {
+    return;
+  }
+  my $eSet = $self->eventSet();
+  $eSet->[1]->channel($PERCUSSION_CHANNEL);
+  my $opus = MIDI::Opus->new({tracks => [map {$_->track} @$eSet],
+			      ticks => $TICKS_PER_BEAT,
+			      format => 1});
+  my $new = ref($self)->fromOpus($opus);
+  $self->midi($new->midi);
+  $self->type($DRUM_LOOP);
+  return 1;
 }
 
 sub eventSet {
@@ -273,7 +312,6 @@ sub CreateTableCommands {
   my $CREATE_LOOPS_TABLE = <<'STATEMENT';
 CREATE TABLE loops (
   id int(11) NOT NULL AUTO_INCREMENT primary key,
-  bars tinyint,
   midi longblob,
   meter varchar(5),
   tempo smallint,

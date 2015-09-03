@@ -11,7 +11,9 @@ use Data::Dumper;
 use JSON;
 
 my $StartDir = $ARGV[0] || ".";
-my $Interactive = $ARGV[1];
+my $ForceToDrums = $ARGV[1];
+my $Interactive = 0;
+my $MaxBars = 32;
 
 my $DS  = ($^O =~ /MSWin/) ? chr(92) : "/";
 my $GenreList = AutoHarp::Model::Genre->all();
@@ -51,7 +53,7 @@ sub recProc {
       my $target = "$dir${DS}$i";
       if (-d $target) {
 	recProc($target);
-      } elsif ($i =~ /\.mid/) {
+      } elsif ($i =~ /\.mid/i) {
 	my $loop = AutoHarp::Model::Loop->fromFile($target,1);
 	if (!$loop) {
 	  print "Couldn't find a valid loop in $target, skipping...\n";
@@ -61,6 +63,14 @@ sub recProc {
 	    (scalar grep {$_->isMusic()} @{$loop->events(1)->events}) <= 1) {
 	  print "$target seems to be a single note, skipping...\n";
 	  return;
+	}
+	if ($ForceToDrums && !$loop->isDrumLoop()) {
+	  print "Converting to drum loop\n";
+	  $loop->toDrumLoop();
+	}
+	if ($loop->bars() > $MaxBars) {
+	  printf "Cutting %d bar loop down to %d bars\n",$loop->bars,$MaxBars;
+	  $loop->bars($MaxBars);
 	}
 	my $exists = AutoHarp::Model::Loop->loadBy({midi => $loop->midi,
 						    type => $loop->type});
@@ -74,7 +84,7 @@ sub recProc {
 	  $loop = $exists;
 	  print "Found clone of $target, using and adding new tags...\n";
 	}
-	$loop->addAttribute($ATTR_FILE, ($i =~ /(.+)\.mid/)[0]);
+	$loop->addAttribute($ATTR_FILE, ($i =~ /(.+)\.mid/i)[0]);
 	findGenresAndAttributes($loop,$target);
 	foreach my $a (@{$loop->getAttributes()}) {
 	  printf "\ttagged loop %-8s => %s\n",$a->attribute(),$a->value();

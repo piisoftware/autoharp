@@ -16,8 +16,6 @@ use Data::Dumper;
 
 use base qw(AutoHarp::Instrument);
 
-my $LOOPS = 'loops';
-
 #Total swags, based on nothing. TODO: TUNE THIS.
 my $GENRE_WEIGHT            = 5;
 my $TEMPO_WEIGHT            = 10;
@@ -41,7 +39,7 @@ sub isDrums {
 
 sub reset {
   my $self = shift;
-  delete $self->{$LOOPS};
+  delete $self->{$ATTR_LOOPS};
 }
 
 sub playDecision {
@@ -63,7 +61,7 @@ sub playDecision {
 sub patterns {
   my $self = shift;
   my $ret = [];
-  while (my ($t,$td) = each %{$self->{$LOOPS}}) {
+  while (my ($t,$td) = each %{$self->{$ATTR_LOOPS}}) {
     while (my ($g,$gd) = each %$td) {
       push(@$ret,{$ATTR_TAG => $t,
 		  $ATTR_FILE => $gd->{$ATTR_FILE}});
@@ -85,10 +83,10 @@ sub play {
     confess "Drum Loop got a segment without a song element tag. Cannot have that";
   }
   my $clock = $segment->music->clock();  
-  my $loop  = $self->{$LOOPS}{$tag};
+  my $loop  = $self->{$ATTR_LOOPS}{$tag};
   if (!$loop) {
     $loop = $self->selectLoop($segment);
-    $self->{$LOOPS}{$tag} = $loop;
+    $self->{$ATTR_LOOPS}{$tag} = $loop;
   }
   my $base  = $loop->events();
   if (!$base) {
@@ -155,7 +153,7 @@ sub handleTransition {
   my $bPer      = $clock->beatsPerMeasure();
   
   my $fillTime  = 0;
-  my $loop = $self->{$LOOPS}{$segment->musicTag()};
+  my $loop = $self->{$ATTR_LOOPS}{$segment->musicTag()};
   if ($segment->transitionOutIsDown()) {
     #take some shit out
     my $beatsToAlter = int(rand($bPer)) + 1;
@@ -234,7 +232,7 @@ sub selectLoop {
   #go through the existing loops, if any, and create some weights 
   #based on bucket, song affiliation, and genre
   my $weights;
-  foreach my $l (values %{$self->{$LOOPS}}) {
+  foreach my $l (values %{$self->{$ATTR_LOOPS}}) {
     foreach my $b (@{$l->getBuckets()}) {
       $weights->{$ATTR_BUCKET}{$b}++;
     }
@@ -314,7 +312,7 @@ sub findLoopBySegmentAndElement {
   my $segment = shift;
   my $element = shift;
   my $eMap = {map {$_->loop_id => 1} @{AutoHarp::Model::LoopAttribute->loadByAttributeValue($SONG_ELEMENT, $element)}};
-  my $loop    = $self->{$LOOPS}{$segment->musicTag};  
+  my $loop    = $self->{$ATTR_LOOPS}{$segment->musicTag};  
   
   my @definites;
   my @maybes;

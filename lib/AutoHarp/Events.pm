@@ -372,6 +372,11 @@ sub measures {
   return $m;
 }
 
+sub bars {
+  my $self = shift;
+  return $self->measures(@_);
+}
+
 sub track {
   my $self    = shift;
   my $args    = shift;
@@ -512,27 +517,26 @@ sub removeType {
 
 #even up borders of this event list
 sub quantize {
-  confess "NEVER CALL THIS. IT DOESN'T WORK";
   my $self  = shift;
   my $quant = shift || $NOTE_MINIMUM_TICKS;
-  if ($quant) {
-    foreach my $n (@$self) {
-      my $t    = $n->time();
-      my $mod  = $t % $quant;
-      my $diff = $quant - $mod;
-      #skip if we're already square on
-      next if (!$mod || !$diff);
-      #if the overshoot (the mod) is greater than the distance to the next quantity...
-      if ($mod > $diff) {
-	#move the note up to the next beat
-	$t += $diff;
-      } else {
-	#otherwise, slide it back to the previous one
-	$t -= $mod;
-      }
-      $n->time($t);
+
+  foreach my $n (@$self) {
+    my $t    = $n->time() - $self->time;
+    my $mod  = $t % $quant;
+    my $diff = $quant - $mod;
+    #skip if we're already square on
+    next if (!$mod || !$diff);
+    #if the overshoot (the mod) is greater than the distance to the next quantity...
+    if ($mod > $diff) {
+      #move the note up to the next beat
+      $t += $diff;
+    } else {
+      #otherwise, slide it back to the previous one
+      $t -= $mod;
     }
+    $n->time($t);
   }
+  return 1;
 }
 
 #returns the list as MIDI events without marker events

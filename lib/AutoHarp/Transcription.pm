@@ -279,7 +279,7 @@ sub write {
 	  || $inst->is($RHYTHM_INSTRUMENT)
 	  || $inst->isDrums()) {
 	my $loop = $play->transcribe($guide);
-	$loop->type(($inst->isDrums()) ? $DRUM_LOOP : $inst->instrumentClass());
+	$loop->type(($inst->isDrums()) ? $GENERATED_DRUM_LOOP : $inst->instrumentClass());
 	$loop->save();
 	$loop->addToGenre($machineGenre);
 	if ($segGenre) {

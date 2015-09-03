@@ -387,29 +387,7 @@ sub handlePlay {
   my $followId = $inst->follow() || $fSuggestion;
   my $play;
   if ($loop && !$loop->isEmpty()) {
-    #we were passed a loop id, so this play is pre-ordained
-    $play = $loop->events();
-    if (!$play->duration()) {
-      $loop->dump();
-      confess "Loop id " . $loop->id . " produced 0 duration MIDI events";
-    }
-    $play->time($segment->time);
-    my $c = $segment->music->clock();
-    if ($play->measures($c) > $segment->measures()) {
-      confess sprintf "PLAY MEASURES for %d is %d, segment measures %d, wtf?\n",
-	$loop->id,
-	  $play->measures($c),
-	    $segment->measures();
-    }
-    while ($play->measures($c) <= int($segment->measures() / 2)) {
-      printf "PLAY MEASURES for %d is %d, segment measures %d, repeating\n",
-	$loop->id,
-	  $play->measures($c),
-	    $segment->measures();
-      #repeat this loop if there's room
-      my $rDur = $play->measures($c) * $c->measureTime(); 
-      $play->repeat($rDur);
-    }
+    $inst->playLoop($segment, $loop);
   } else {
     $play = $inst->play($segment, $playLog->{$followId});
     $inst->clearPlayLog();

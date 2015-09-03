@@ -1,0 +1,102 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Fuzzy;
+use AutoHarp::Model;
+use AutoHarp::Model::Loop;
+use AutoHarp::Events::DrumTrack;
+use AutoHarp::Events::Guide;
+use AutoHarp::Clock;
+use Date::Format;
+use AutoHarp::Instrument::DrumLoop;
+use AutoHarp::MusicBox::Song::Segment;
+use AutoHarp::Constants;
+use AutoHarp::Config;
+use MIDI;
+use Cwd;
+
+my $LOOP_BARS = 4;
+my $RNN_DIR = "/Users/marz/workplace/char-rnn";
+my $ARCHIVE_ROOT = "/Users/marz/workplace/rnn-output";
+
+my $OUTPUT_CMD = "th sample.lua -gpuid -1 -primetext meter";
+my $TMP_FILE = "/tmp/thOutput";
+my $ITERATION = '2.1';
+
+my $outputDir = "$ENV{HOME}/workplace/char-rnn/data/autoharp_$ITERATION";
+if (!-d $outputDir) {
+  mkdir($outputDir);
+}
+
+my $testBucket = 'GrooveMonkey';
+my $testGenre  = AutoHarp::Model::Genre->loadByName('Rock');
+
+open(FILE, ">$outputDir/input.txt");
+# my $set = AutoHarp::Model::Select
+#    (
+#     "select l.id from loops l, loop_attributes la, loop_genres lg, genres g " .
+#     "where l.type = '$DRUM_LOOP' " .
+#     "and l.meter = '4/4' " .
+#     "and l.id = g.loop_id " . 
+#     "and g.name = '$testGenre' ".
+#     "and g.id = lg.genre_id " .
+#     "and lg.loop_id = la.loop_id " .
+#     "and la.attribute = 'bucket' " .
+#     "and la.value = '$testBucket'");
+my $drummer = AutoHarp::Instrument::DrumLoop->new();
+for (1..5000) {
+  $drummer->reset();
+  $drummer->isPlaying(1);
+  # my $lid = $set->[int(rand(scalar @$set))]->{id};
+  # my $loop = AutoHarp::Model::Loop->load($lid);
+  my $music = AutoHarp::MusicBox::Base->new();
+  $music->measures($LOOP_BARS);
+  $music->genre($testGenre);
+  $music->tag($SONG_ELEMENT_INSTRUMENTAL);
+  my $segment = AutoHarp::MusicBox::Song::Segment->new();
+  $segment->music($music);
+  $segment->transitionOut(pickOne($ATTR_STRAIGHT_TRANSITION,
+				  $ATTR_UP_TRANSITION,
+				  $ATTR_DOWN_TRANSITION));
+  my $events = $drummer->play($segment);
+
+  # my $eSet   = $loop->eventSet();
+  # my $guide  = $eSet->[0];
+  # my $events = $eSet->[1];
+  # my $clock = $guide->clock();
+  # my $repeated;
+  # while ($events->measures($clock) < $LOOP_BARS) {
+  #   my $m = $events->measures($clock);
+  #   my $rDur = $m * $clock->measureTime();
+  #   $events->repeat($rDur);
+  #   printf "%d was %d measures, REPEATING made it %d measures\n",$loop->id,$m,$events->measures($clock);
+  #   $repeated = 1;
+  # }
+  # if ($events->measures($clock) > $LOOP_BARS) {
+  #   if ($repeated) {
+  #     printf "%d was odd, skipping...\n",$loop->id;
+  #     next;
+  #   }
+  #   printf "%d was %d measures, TRUNCATING to %d measures\n",$loop->id,$events->measures($clock),$LOOP_BARS;
+  #   $events->truncate($clock->measureTime() * $LOOP_BARS);
+  # }
+  my ($tag, $l) = each %{$drummer->{$ATTR_LOOPS}};
+  printf FILE "START LOOP\n";
+  printf FILE "TEMPO %d\n",$l->tempo;
+  my $splits = $events->split();
+  foreach my $d (sort keys %$splits) {
+    printf FILE "%s,%s\n",$d,AutoHarp::Notation::DrumTrack2String($splits->{$d},
+								  $music->guide,
+								  $TICKS_PER_BEAT / 4);
+  }
+  # foreach my $e (@$events) {
+  #   next if (!$e->isNote());
+  #   printf FILE "%s\n",$e->toTextLine;
+  # }
+  printf FILE "END LOOP\n";
+}
+close(FILE);
+
+exit(0);

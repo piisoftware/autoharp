@@ -1,0 +1,48 @@
+#!/usr/bin/env perl
+use Test::More;
+use AutoHarp::Constants;
+use AutoHarp::Fuzzy;
+use AutoHarp::Model;
+use AutoHarp::Model::Loop;
+use AutoHarp::Model::LoopAttribute;
+use_ok AutoHarp::GrooveTemplate;
+use MIDI;
+use AutoHarp::Config;
+use strict;
+
+my $testCount = 1;
+my $testBucket = 'GrooveMonkey';
+my $testGenre  = 'Rock';
+
+my $set = AutoHarp::Model::Select
+   (
+    "select l.id from loops l, loop_attributes la, loop_genres lg, genres g " .
+    "where l.type = '$DRUM_LOOP' " .
+    "and l.meter = '4/4' " .
+    "and l.id = lg.loop_id " . 
+    "and g.name = '$testGenre' ".
+    "and g.id = lg.genre_id " .
+    "and lg.loop_id = la.loop_id " .
+    "and la.attribute = 'bucket' " .
+    "and la.value = '$testBucket'");
+
+my $machineLoops = AutoHarp::Model::LoopAttribute->loadByAttributeValue(bucket => '20150821GenTwoBootstrap');
+for (1..10) {
+  my $tLoopId = pickOne(@$set);
+  my $genTwo = pickOne(@$machineLoops);
+  my $templateLoop = AutoHarp::Model::Loop->load($tLoopId->{id});
+  my $grooveNeeder = AutoHarp::Model::Loop->load($genTwo->loop_id);
+  
+  my $gt = AutoHarp::GrooveTemplate->fromLoop($templateLoop);
+  my $events = $grooveNeeder->events();
+  $gt->applyGroove($events);
+  my $opus = MIDI::Opus->new({tracks => [$grooveNeeder->guide()->track,
+					 $events->track()],
+			      format => 1,
+			      ticks => $TICKS_PER_BEAT
+			     });
+  AutoHarp::Config::PlayOpus($opus);
+}
+done_testing($testCount);
+exit(0);
+

@@ -1,0 +1,152 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Model;
+use AutoHarp::Model::Loop;
+use AutoHarp::Events::DrumTrack;
+use AutoHarp::Events::Guide;
+use AutoHarp::Notation;
+use AutoHarp::Clock;
+use Date::Format;
+use AutoHarp::Instrument::DrumLoop;
+use AutoHarp::MusicBox::Song::Segment;
+use AutoHarp::Constants;
+use AutoHarp::Config;
+use MIDI;
+use Cwd;
+
+my $EXPECTED_BARS = 4;
+
+my $RNN_DIR = "/Users/marz/workplace/char-rnn";
+my $ARCHIVE_ROOT = "/Users/marz/workplace/rnn-output";
+
+my $OUTPUT_CMD = "th sample.lua -gpuid -1 -primetext START";
+my $ITERATION = 'seven';
+
+my $batchName = $ARGV[0] || "drumExperiment";
+
+if ($batchName !~ /^\d{8}/) {
+  $batchName = Date::Format::time2str("%Y%m%d",time()) . "$batchName";
+}
+my $targetDir = "$ARCHIVE_ROOT/$batchName";
+my $textDir   = "$targetDir/text";
+
+my $MachineGenre = AutoHarp::Model::Genre->loadByName($ATTR_MACHINE_GENRE);
+if (!-d $targetDir) {
+  mkdir($targetDir) or die "NO $targetDir: $!\n";
+  system("mv $RNN_DIR/cv/* $targetDir");
+  if (!-d $textDir) {
+    mkdir($textDir);
+  }
+}
+
+my $was = getcwd();
+chdir($RNN_DIR);
+
+opendir(TARGET, $targetDir) or die "REALLY, NO: $!\n";
+my $guide = AutoHarp::Events::Guide->new();
+$guide->measures($EXPECTED_BARS);
+foreach my $f (grep {/\w/} readdir(TARGET)) {
+  my $sampleFile = "$targetDir/$f";
+  my $epoch = ($f =~ /epoch(\d+\.\d+_\d+)/)[0];
+  my $tmpFile = "$textDir/$epoch.txt";
+  if (system("$OUTPUT_CMD $sampleFile > $tmpFile") || !(-f $tmpFile)) {
+    die "Failed to export $f: $!\n";
+  }
+  print "\n\n$epoch:\n";
+
+  open(RESULT, $tmpFile) or die "Can't open $tmpFile: $!\n";
+
+  my $events;
+  my $tempo;
+
+  print "$tmpFile==>\n";
+  while(<RESULT>) {
+    chomp();
+    if (/START LOOP/) {
+      print "Starting new loop...\n";
+      $events = AutoHarp::Events::DrumTrack->new();
+      next;
+    } elsif (/END LOOP/) {
+      handleEvents($events,$guide, $epoch);
+      $events = undef;
+    } elsif (/TEMPO (\d+)/) {
+      $guide->clock->tempo($1);
+      print "Set tempo to $1\n";
+    } elsif (/(\d+),(\|.+)/) {
+      if (!$events) {
+	print "Skipping $_ (no drum track defined)\n";
+	next;
+      }
+      my $pitch = $1;
+      my $str   = $2;
+      eval {
+	my $t = AutoHarp::Notation::String2DrumTrack($str,$guide,$pitch);
+	$events->add($t);
+	printf "Added %-20s,%s\n",
+	  $MIDI::notenum2percussion{$pitch},
+	  $str;
+      };
+      if ($@) {
+	print "Skipping $_: $@\n";
+      }
+    } else {
+      print "Skipping $_ (bad format)\n";
+    }
+  }
+  close(RESULT);
+  if ($events) {
+    handleEvents($events,$guide, $epoch);
+  }
+}
+chdir($was);
+exit(0);
+
+sub handleEvents {
+  my $events = shift;
+  my $guide  = shift;
+  my $epoch  = shift;
+  if ($events) {
+    printDrums($events,$guide);
+    if ($events->measures($guide->clock) < $EXPECTED_BARS) {
+      print "Not saving: too short\n";
+    } else {
+      #cut down to 4 bars
+      $events->truncate($guide->duration());
+      saveAsLoop($events,$guide,$epoch);
+      print "SAVED\n";
+    }
+  } else {
+    print "Nothing to save\n";
+  }
+}
+
+sub saveAsLoop {
+  my $events = shift;
+  my $guide  = shift;
+  my $epoch  = shift;
+  my $opus = MIDI::Opus->new({tracks => [$guide->track(), $events->track()],
+			      ticks => $TICKS_PER_BEAT,
+			      format => 1});
+  my $loop = AutoHarp::Model::Loop->fromOpus($opus);
+  $loop->type($DEEP_DRUM_LOOP);
+  $loop->save();
+  $loop->addToGenre($MachineGenre);
+  $loop->addAttribute($ATTR_BUCKET, $batchName);
+  $loop->addAttribute($TRAINING_EPOCH, $epoch);
+}
+ 
+sub printDrums {
+  my $drums = shift;
+  my $guide = shift;
+  printf "TEMPO %d\n",$guide->clock->tempo;
+  my $splits = $drums->split();
+  foreach my $d (sort keys %$splits) {
+    printf "%-20s,%s\n",$MIDI::notenum2percussion{$d},
+      AutoHarp::Notation::DrumTrack2String($splits->{$d},
+					   $guide,
+					   $TICKS_PER_BEAT / 4);
+  }
+}

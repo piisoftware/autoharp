@@ -321,10 +321,11 @@ sub String2DrumTrack {
   
   my $guideMeasures = $guide->eachMeasure();
   my $clock         = $guide->clock();
-  my $ticksPer      = ($hasLeadIn) ? length($measures[1]) : length($measures[0]);
-  my $resolution    = ($ticksPer) ? $clock->measureTime / $ticksPer : 
-    $DRUM_RESOLUTION;
-  
+  my $beatsPer      = ($hasLeadIn) ?
+    length($measures[1]) :
+    length($measures[0]);
+  my $resolution    = $clock->measureTime / $beatsPer;
+
   if ($hasLeadIn) {
     #throw a lead-in measure on the front to handle this
     #the lead-in probably isn't a whole measure long, 
@@ -334,8 +335,10 @@ sub String2DrumTrack {
 
   my $mTime;
   for(my $mIdx = 0; $mIdx < scalar @$guideMeasures; $mIdx++) {
-    my $measure    = $measures[$mIdx];
-    
+    if ($resolution != int($resolution)) {
+      die sprintf("Detected irregular resolution at measure %d of %s\n%d beats per measure.\nCan't parse!",$mIdx + 1,$string,$beatsPer);
+    }
+    my $measure    = $measures[$mIdx];    
     $mTime         = ($mIdx < scalar @$guideMeasures) ?
       $guideMeasures->[$mIdx] : $mTime + $clock->measureTime;
     my $nextMeasureStart = $mTime + $clock->measureTime();
@@ -346,7 +349,7 @@ sub String2DrumTrack {
 	$hObj->time($mTime);
 	$hObj->pitch($drumPitch);
 	$hObj->digit2Velocity($char);
-	$hObj->duration($resolution);
+	$hObj->duration($DRUM_RESOLUTION);
 	$drumTrack->add($hObj);
       } 
       $mTime += $resolution;
@@ -365,8 +368,8 @@ sub String2DrumTrack {
     }
     #set up the next resolution, in case it changes
     $clock       = $guide->clockAt($nextMeasureStart);
-    $ticksPer    = length($measures[$mIdx + 1]);
-    $resolution  = int($clock->measureTime / $ticksPer) if ($ticksPer);
+    $beatsPer    = length($measures[$mIdx + 1]);
+    $resolution  = int($clock->measureTime / $beatsPer) if ($beatsPer);
   }
   return $drumTrack;
 }
