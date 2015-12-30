@@ -1,6 +1,7 @@
 package AutoHarp::Model::Genre;
 
 use AutoHarp::Model::Loop;
+use AutoHarp::Model::LoopGenre;
 use AutoHarp::Constants;
 use AutoHarp::Config;
 use AutoHarp::Fuzzy;
@@ -59,11 +60,10 @@ sub getLoops {
   my $self = shift;
   my $type = shift;
   my $args = {genre_id => $self->id};
-  if ($type) {
-    $args->{type} = $type;
-  }
-  return [map {AutoHarp::Model::Loop->load($_->{loop_id})}
-	  @{AutoHarp::Model::LoopGenres->all($args)}];
+  my $lgs = AutoHarp::Model::LoopGenre->all($args);
+  return [grep {!$type || $_->type eq $type} 
+	  map {AutoHarp::Model::Loop->load($_->loop_id)}
+	  @$lgs];
 }
 
 sub getDrumLoops {

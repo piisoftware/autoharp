@@ -284,6 +284,12 @@ sub genres {
 	 ];
 }
 
+sub matchesGenre {
+  my $self = shift;
+  my $genre = shift;
+  return (scalar grep {$_->id == $genre->id} @{$self->genres});
+}
+
 #this loop came out of the machine, 
 #and belongs to no other genre
 sub isMachined {

@@ -20,6 +20,36 @@ sub new {
   return $self;
 }
 
+sub fromDataStructure {
+  my $class = shift;
+  my $self = $class->SUPER::fromDataStructure(@_);
+
+  #set the measures from the melody, since that's all there is
+  my $tMeas = $self->melody()->measures($self->guide->clock);
+  $self->guide->measures($tMeas);
+  return $self;
+}
+
+#use the old, array-based DS for music box bases
+sub fromLegacyDataStructure {
+  my $class = shift;
+  my $ds    = shift;
+  my $self  = {};
+  my $guide = 
+    $self->{$ATTR_GUIDE} = 
+      AutoHarp::Events::Guide->fromString(shift(@$ds));
+  my $trueMeasures = 0;
+  if (scalar @$ds) {
+    my $mel = AutoHarp::Events::Melody->new();
+    $mel->time($guide->time);
+    foreach my $m (@$ds) {
+      $mel->add(AutoHarp::Events::Melody->fromString($m,$guide));
+    }
+    $self->{$ATTR_MELODY} = $mel;
+  }
+  return bless $self,$class;
+}
+
 sub theHook {
   return $_[0]->melody();
 }

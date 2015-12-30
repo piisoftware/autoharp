@@ -35,8 +35,10 @@ sub CompositionFromDataStructure {
 	$SONG_ELEMENT_TRANSITION => $d->{$SONG_ELEMENT_TRANSITION}
        }
       );
-    $e->firstHalfPerformers([split(/\s*,\s*/,$d->{$FIRST_HALF})]);
-    $e->secondHalfPerformers([split(/\s*,\s*/,$d->{$SECOND_HALF})]);
+    my $firstP  = $d->{$FIRST_HALF} || $d->{$PLAYERS};
+    my $secondP = $d->{$SECOND_HALF} || $d->{$PLAYERS};
+    $e->firstHalfPerformers([split(/\s*,\s*/,$firstP)]);
+    $e->secondHalfPerformers([split(/\s*,\s*/,$secondP)]);
     $e->firstHalfUID($d->{$FIRST_UID});
     $e->secondHalfUID($d->{$SECOND_UID});
     push(@$comp, $e);

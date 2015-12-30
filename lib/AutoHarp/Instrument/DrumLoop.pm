@@ -317,6 +317,7 @@ sub findLoopBySegmentAndElement {
   my @definites;
   my @maybes;
   my $attrs = {};
+  my $hasGenre = ($segment->genre()) ? 1 : 0;
   if ($loop) {
     $attrs->{$ATTR_SONG} = {map {$_ => 1} @{$loop->getSongAffiliations}};
     $attrs->{$ATTR_BUCKET} = {map {$_ => 1} @{$loop->getBuckets}};
@@ -326,18 +327,21 @@ sub findLoopBySegmentAndElement {
 		     @{AutoHarp::Model::Loop->loadByTypeAndMeter
 			 ($DRUM_LOOP, $segment->music->clock->meter)
 		       }) {
-    if (scalar grep {$attrs->{$ATTR_SONG}{$_}} @{$eLoop->getSongAffiliations()}) {
-      #yo. Strong affiliation
-      push(@definites,$eLoop);
-    } else {
-      my $bucketsInCommon = scalar 
-	grep {$attrs->{$ATTR_BUCKET}{$_}} 
-	  @{$eLoop->getBuckets()};
-      if ($bucketsInCommon > 1 && $eLoop->matchesTempo($attrs->{$ATTR_TEMPO})) {
-	#a couple of buckets and tempo, so yes
-	push(@definites, $eLoop);
+    my $genreMatch = ($hasGenre) ? $eLoop->matchesGenre($segment->genre) : 1;
+    if ($genreMatch) {
+      if (scalar grep {$attrs->{$ATTR_SONG}{$_}} @{$eLoop->getSongAffiliations()}) {
+	#yo. Strong affiliation
+	push(@definites,$eLoop);
       } else {
-	push(@maybes,$eLoop);
+	my $bucketsInCommon = scalar 
+	  grep {$attrs->{$ATTR_BUCKET}{$_}} 
+	  @{$eLoop->getBuckets()};
+	if ($bucketsInCommon > 1 && $eLoop->matchesTempo($attrs->{$ATTR_TEMPO})) {
+	  #a couple of buckets and tempo, so yes
+	  push(@definites, $eLoop);
+	} else {
+	  push(@maybes,$eLoop);
+	}
       }
     }
   }

@@ -261,35 +261,38 @@ sub write {
   my $machineGenre = AutoHarp::Model::Genre->loadOrCreate({name => $ATTR_MACHINE_GENRE});
   $machineGenre->save();
 
-  foreach my $seg (@{$song->segments}) {
-    my $guide = $seg->music->guide();
-    my $segGenre = $seg->genre();
-    foreach my $ppData (@{$seg->playerPerformances}) {
-      my $inst = $ppData->{$ATTR_INSTRUMENT};
-      my $play = $ppData->{$ATTR_MELODY};
-      if ($self->{$ATTR_LOOPS} &&
-	  exists $self->{$ATTR_LOOPS}{$seg->uid} &&
-	  $self->{$ATTR_LOOPS}{$seg->uid}{$inst->uid}) {
-	#this is already a loop--no need to write it
-	next;
-      }
-      if ($inst->is($THEME_INSTRUMENT) 
-	  || $inst->is($LEAD_INSTRUMENT)
-	  || $inst->is($HOOK_INSTRUMENT)
-	  || $inst->is($RHYTHM_INSTRUMENT)
-	  || $inst->isDrums()) {
-	my $loop = $play->transcribe($guide);
-	$loop->type(($inst->isDrums()) ? $GENERATED_DRUM_LOOP : $inst->instrumentClass());
-	$loop->save();
-	$loop->addToGenre($machineGenre);
-	if ($segGenre) {
-	  $loop->addToGenre($segGenre);
+  if (!$ENV{AUTOHARP_NO_LOOPS}) {
+    foreach my $seg (@{$song->segments}) {
+      my $guide = $seg->music->guide();
+      my $segGenre = $seg->genre();
+      foreach my $ppData (@{$seg->playerPerformances}) {
+	my $inst = $ppData->{$ATTR_INSTRUMENT};
+	my $play = $ppData->{$ATTR_MELODY};
+	if ($self->{$ATTR_LOOPS} &&
+	    exists $self->{$ATTR_LOOPS}{$seg->uid} &&
+	    $self->{$ATTR_LOOPS}{$seg->uid}{$inst->uid}) {
+	  #this is already a loop--no need to write it
+	  next;
 	}
-	$loop->addAttribute($ATTR_AUTOHARP_SONG, $sessionName);
-	$loops->{$seg->uid}{$inst->uid} = $loop->id();
+	if ($inst->is($THEME_INSTRUMENT) 
+	    || $inst->is($LEAD_INSTRUMENT)
+	    || $inst->is($HOOK_INSTRUMENT)
+	    || $inst->is($RHYTHM_INSTRUMENT)
+	    || $inst->isDrums()) {
+	  my $loop = $play->transcribe($guide);
+	  $loop->type(($inst->isDrums()) ? $GENERATED_DRUM_LOOP : $inst->instrumentClass());
+	  $loop->save();
+	  $loop->addToGenre($machineGenre);
+	  if ($segGenre) {
+	    $loop->addToGenre($segGenre);
+	  }
+	  $loop->addAttribute($ATTR_AUTOHARP_SONG, $sessionName);
+	  $loops->{$seg->uid}{$inst->uid} = $loop->id();
+	}
       }
     }
   }
+
   my $outJson = $self->JSONOut();
   my $outMIDI = $self->MIDIOut();
   $song->out($outMIDI);
