@@ -1,0 +1,1054 @@
+#!/usr/bin/env perl
+use strict;
+use File::Temp qw( :POSIX );
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use Curses::UI;
+  
+use AutoHarp::Generator;
+use AutoHarp::Events::Guide;
+use AutoHarp::Transcription;
+use AutoHarp::Instrument;
+use AutoHarp::Constants;
+use AutoHarp::Conductor;
+use AutoHarp::Composer;
+use AutoHarp::Model::Genre;
+use AutoHarp::Clock;
+use AutoHarp::Scale;
+use AutoHarp::Fuzzy;
+use AutoHarp::Config;
+
+#   make KEY_BTAB (shift-tab) working in XTerm
+#   and also at the same time enable colors
+#$ENV{TERM} = "xterm-vt220" if ($ENV{TERM} eq 'xterm');
+
+my $debug = 0;
+if (@ARGV and $ARGV[0] eq '-d') {
+    $debug = 1;
+  }
+
+# We do not want STDERR to clutter our screen.
+open(STDERR, ">>/tmp/autoprotoerr.log") or die "Can't divert STDERR: $!";
+
+
+my $Cui = new Curses::UI ( 
+    -clear_on_exit => 1, 
+    -debug => $debug,
+);
+
+# Window Idx
+my $winIdx = 1;
+
+# Demo windows
+my %w = ();
+
+my $Genres = AutoHarp::Model::Genre->all();
+my $Clock = AutoHarp::Clock->new();
+my $Scale = AutoHarp::Scale->new();
+my $Genre = AutoHarp::Model::Genre->new('Electronic');
+my $Bars  = 8;
+
+my $MAIN_SC = 'Main';
+my $INST_SC = 'Inst';
+my $ARNG_SC = 'Arrangement';
+my $COMP_SC = 'Compose';
+my $FILE_SC = 'FileBrowser';
+
+my %screens =
+  (
+   $MAIN_SC => 'Settings',
+   $INST_SC => 'Instruments',
+   $ARNG_SC => 'Arrangement',
+   $COMP_SC => 'Compose',
+   $FILE_SC => 'File Browser'
+  );
+
+my $FILE_MENU = [{-label => 'Load', -value => \&load},
+		 {-label => 'Save', -value => \&save},
+		 {-label => 'Quit', -value => sub {exit(0)}}];
+
+my $SCREENS_MENU = [{-label => $screens{$MAIN_SC}, -value => sub {select_screen($MAIN_SC)}},
+		    {-label => $screens{$INST_SC}, -value => sub {select_screen($INST_SC)}},
+		    {-label => $screens{$COMP_SC}, -value => sub {select_screen($COMP_SC)}},
+		    {-label => $screens{$ARNG_SC},  -value => sub {select_screen($ARNG_SC)}},
+		   ];
+
+my $SONG_SEGMENTS = [];
+
+my $menu = $Cui->add
+  (
+   'main menu',
+   'Menubar', 
+   -menu => [{-label => 'File', -submenu => $FILE_MENU},
+	     {-label => 'Screens', -submenu => $SCREENS_MENU},
+	     {-label => 'Segments', -value => $SONG_SEGMENTS},
+	     {-label => 'Generate', -value => \&generate},
+	    ],
+   -fg  => "blue",
+  );
+
+sub alert {
+  my $text = shift;
+  $Cui->dialog(
+	       -message   => $text,
+	       -title     => "NO!"
+	       -buttons   => ['ok'],
+	      );
+}
+
+sub inform {
+  my $i = shift;
+  $Cui->dialog(
+	       -message   => $i,
+	       -title     => "Hey there:"
+	       -buttons   => ['ok'],
+	      );
+}
+
+sub select_screen($;)
+{
+    my $nr = shift;
+    $w{$nr}->focus;
+}
+
+my $widget_demo_menu = [
+    { -label => 'Label',              -value => sub{select_screen(1)}  },
+    { -label => 'Buttons',            -value => sub{select_screen(2)}  },
+    { -label => 'Checkbox',           -value => sub{select_screen(3)}  },
+    { -label => 'Texteditor',         -value => sub{select_screen(4)}  },
+    { -label => 'Listbox',            -value => sub{select_screen(5)}  },
+    { -label => 'Popupmenu',          -value => sub{select_screen(6)}  },
+    { -label => 'Progressbar',        -value => sub{select_screen(7)}  },
+    { -label => 'Calendar',           -value => sub{select_screen(8)}  },
+];
+
+my $dialog_demo_menu = [
+    { -label => 'Basic dialog',       -value => sub{select_screen(9)}  },
+    { -label => 'Error dialog',       -value => sub{select_screen(10)} },
+    { -label => 'Filebrowser dialog', -value => sub{select_screen(11)} },
+    { -label => 'Progress dialog',    -value => sub{select_screen(12)} },
+    { -label => 'Status dialog',      -value => sub{select_screen(13)} },
+    { -label => 'Calendar dialog',    -value => sub{select_screen(14)} },
+    { -label => 'Question dialog',    -value => sub{select_screen(15)} },
+];
+
+my $demo_menu = [
+    { -label => 'Widget demos',       -submenu => $widget_demo_menu  },
+    { -label => 'Dialog demos',       -submenu => $dialog_demo_menu  },
+    { -label => '------------',       -value   => sub{}              },
+    { -label => 'Next demo',          -value   => \&goto_next_demo   },
+    { -label => 'Previous demo',      -value   => \&goto_prev_demo   },
+];
+
+# ----------------------------------------------------------------------
+# Create the explanation window
+# ----------------------------------------------------------------------
+
+my $w0 = $Cui->add(
+    'w0', 'Window', 
+    -border        => 1, 
+    -y             => -1, 
+    -height        => 3,
+);
+$w0->add('explain', 'Label', 
+  -text => "CTRL+X: menu  CTRL+Q: quit"
+);
+
+my %args = (
+    -border       => 1, 
+    -titlereverse => 0, 
+    -padtop       => 2, 
+    -padbottom    => 3, 
+    -ipad         => 1,
+);
+
+while (my ($nr, $title) = each %screens) {
+  my $id = "window_$nr";
+  $w{$nr} = $Cui->add
+    (
+     $id, 'Window', 
+     -title => $title,
+     %args
+    );
+}
+
+# ----------------------------------------------------------------------
+# MAIN (Settings) SCREEN
+# ----------------------------------------------------------------------
+
+{
+  my $M = $w{$MAIN_SC};
+  my $yc = 0;
+  #$w{$MAIN_SC}->add(undef,'Label',-text=>"dim font",-y=>5,-dim=>1 );
+  #$w{$MAIN_SC}->add(undef,'Label',-text=>"bold font",-y=>7,-bold=>1 );
+  #$w{$MAIN_SC}->add(undef,'Label',-text=>"reversed font",-y=>9,-reverse => 1 );
+  #$w{$MAIN_SC}->add(undef,'Label',-text=>"underlined font",-x=>15,-y=>5,-underline=>1 );
+  #$w{$MAIN_SC}->add(undef,'Label',-text=>"blinking font",-x=>15,-y=>7,-blink=>1 );
+
+  $M->add(undef, 'Label', -y => $yc++, -bold => 1,
+	  -text => "AUTOHARP SONG LAB (PROTOTYPE)");
+  $M->add(undef, 'Label', -y => $yc++, -underlined => 1,
+	  -text => "(c) 2015 Paul Mariz/Pii Software");
+
+  $yc += 2;
+  $M->add(undef, 'Label', -y => $yc++, -bold => 1, -text => "Global Settings");
+  $M->add(undef, 'Label', -y => $yc, -text => "Bars");
+  $M->add
+    (
+     undef, 'TextEntry',
+     -sbborder => 1,
+     -y => $yc++,
+     -x => 8,
+     -width => 5,
+     -text => $Bars,
+     -onBlur => sub {
+       my $self = shift;
+       my $v = $self->get();
+       if ($v < 1 || $v > 12) {
+	 $self->text($Bars);
+	 alert("$v is an invalid number of bars");
+       } else {
+	 $Bars = int($v);
+       }
+     }
+    );
+  $M->add(undef, 'Label', -y => $yc, -text => "Meter:");
+  $M->add
+    (
+     undef, 'TextEntry',
+     -sbborder => 1,
+     -y => $yc++,
+     -x => 8,
+     -width => 7,
+     -text => $Clock->meter,
+     -onBlur => sub {
+       my $self = shift;
+       my $v = $self->get();
+       my $was = $Clock->meter();
+       if ($v ne $was) {
+	 my $is = $Clock->meter($v);
+	 if ($was eq $is) {
+	   $self->text($was);
+	   alert("$v is an invalid meter");
+	 }
+       }
+     }
+    );
+
+  $M->add(undef, 'Label', -y => $yc, -text => "Tempo:");
+  $M->add
+    (
+     undef, 'TextEntry',
+     -sbborder => 1,
+     -y => $yc++,
+     -x => 8,
+     -width => 6,
+     -text => $Clock->tempo,
+     -onBlur => sub {
+       my $self = shift;
+       my $v = $self->get();
+       my $was = $Clock->tempo();
+       if ($v != $was) {
+	 my $is = $Clock->tempo($v);
+	 if ($was == $is) {
+	   alert("$v is an invalid tempo!");
+	   $self->text($Clock->tempo);
+	 }
+       }
+     }
+    );
+
+  $M->add(undef, 'Label', -y => $yc, -text => "Key:");
+  $M->add
+    (
+     undef, 'TextEntry',
+     -sbborder => 1,
+     -y => $yc++,
+     -x => 8,
+     -width => 18,
+     -text => $Scale->key,
+     -onBlur => sub {
+       my $self = shift;
+       my $v = $self->get();
+       if ($v ne $Scale->key) {
+	 $self->text($Scale->key($v));
+       }
+     }
+    );
+  last;
+  $M->add(undef, 'Label', -y => $yc, -text => "Genre:");
+  my $sel = 0;
+  for(; $sel < scalar @$Genres; $sel++) {
+    last if ($Genre->id == $Genres->[$sel]->id);
+  }
+  
+  $M->add(
+    undef, 'Popupmenu',
+	  -y          => $yc++,
+	  -values     => [map {$_->id} @$Genres],
+	  -labels     => [map {$_->name} @$Genres],
+	  -selected   => $sel,
+	  -width      => 20,
+	  -onchange   => sub {
+	    my $self = shift;
+	    my $val = $self->get;
+	    $Genre = AutoHarp::Model::Genre->load($self->get);
+	    if (!$Genre) {
+	      my $lab = $self->{-labels}->{$val};
+	      alert("I guess $lab was invalid?");
+	      $Genre = AutoHarp::Model::Genre->new('Electronic');
+	    }
+	  }
+	 );
+}
+
+# ----------------------------------------------------------------------
+# Instruments Window
+# ----------------------------------------------------------------------
+
+$w{$INST_SC}->add
+  (
+   undef, 'Label',
+   -text => "This is the instrument screen"
+  );
+
+$w{$INST_SC}->add(
+    'buttonlabel', 'Label',
+    -y => 7,
+    -width => -1,
+    -bold => 1,
+    -text => "Press a button please...",
+);
+
+sub button_callback($;)
+{
+    my $this = shift;
+    my $label = $this->parent->getobj('buttonlabel');
+    $label->text("You pressed: " . $this->get);
+}
+
+$w{$INST_SC}->add(
+    undef, 'Buttonbox',
+    -y => 5,    
+    -buttons => [
+         {
+            -label => "< Button 1 >",
+        -value => "the first button", 
+        -onpress => \&button_callback, 
+        },{
+            -label => "< Button 2 >", 
+        -value => "the second button", 
+        -onpress => \&button_callback, 
+        },{
+            -label => "< Button 3 >", 
+        -value => "the third button", 
+        -onpress => \&button_callback, 
+        },    
+    ],
+);
+
+# ----------------------------------------------------------------------
+# Arrange window
+# ----------------------------------------------------------------------
+
+$w{$ARNG_SC}->add
+  (
+   undef, 'Label',
+   -text => "Arrange"
+  );
+
+my $cb_no = "The checkbox says: I don't like it :-(";
+my $cb_yes = "The checkbox says: I do like it! :-)";
+
+$w{$ARNG_SC}->add(
+    'checkboxlabel', 'Label',
+    -y       => 8,
+    -width   => -1,
+    -bold    => 1,
+    -text    => "Check the checkbox please...",
+);
+
+$w{$ARNG_SC}->add(
+    undef, 'Checkbox',
+    -y => 6,
+    -checked => 0,
+    -label => 'I like this Curses::UI demo so far!',
+    -onchange => sub {
+        my $cb = shift;
+        my $label = $cb->parent->getobj('checkboxlabel'); 
+        $label->text($cb->get ? $cb_yes : $cb_no);
+    },
+);
+
+# ----------------------------------------------------------------------
+# Compose Window
+# ----------------------------------------------------------------------
+
+$w{$COMP_SC}->add
+  (
+   undef, 'Label',
+   -text => "Compose"
+  );
+
+$w{$COMP_SC}->add(
+    'te1', 'TextEditor',
+    -title => 'not wrapping',
+    -y => 5, -width => 20, -border => 1,
+    -padbottom => 4,
+    -vscrollbar => 1,
+    -hscrollbar => 1,
+    -onChange => sub {
+        my $te1 = shift;
+        my $te2 = $te1->parent->getobj('te2');
+        my $te3 = $te1->parent->getobj('te3');
+        $te2->text($te1->get);
+        $te3->text($te1->get);
+        $te2->pos($te1->pos);
+    },
+);
+
+$w{$COMP_SC}->add(
+    'te2', 'TextEditor',
+    -title => 'wrapping',
+    -y => 5, -x => 21, -width => 20, -border => 1,
+    -padbottom => 4,
+    -vscrollbar => 1,
+    -hscrollbar => 1,
+    -wrapping => 1,
+    -onChange => sub {
+        my $te2 = shift;
+        my $te1 = $te2->parent->getobj('te1');
+        my $te3 = $te2->parent->getobj('te3');
+        $te1->text($te2->get);
+        $te3->text($te2->get);
+        $te1->pos($te2->pos);
+    },
+);
+
+$w{$COMP_SC}->add(
+    'te3', 'TextViewer',
+    -y => 5, -x => 42, -width => 20, -border => 1,
+    -padbottom => 4,
+    -title => "Read only",
+    -vscrollbar => 1,
+    -hscrollbar => 1,
+);
+
+$w{$COMP_SC}->add(
+    undef, 'Label', -y => -3,
+    -text => "Single line entry:",
+    -width => 20,
+
+);
+$w{$COMP_SC}->add(
+    undef, 'TextEntry',
+    -sbborder => 1,
+    -y => -3,
+    -x => 21,
+    -width => 20,
+);
+
+$w{$COMP_SC}->add(
+    undef, 'Label', -y => -1,
+    -text => "Password entry:",
+    -width => 20,
+
+);
+$w{$COMP_SC}->add(
+    undef, 'PasswordEntry',
+    -sbborder => 1,
+    -y => -1,
+    -x => 21,
+    -width => 20,
+);
+
+# ----------------------------------------------------------------------
+# File browser
+# ----------------------------------------------------------------------
+
+my $values = [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ];
+my $labels = {
+    1  => 'One',     2  => 'Two',
+    3  => 'Three',   4  => 'Four',
+    5  => 'Five',    6  => 'Six',
+    7  => 'Seven',   8  => 'Eight',
+    9  => 'Nine',    10 => 'Ten',
+};
+
+$w{$FILE_SC}->add
+  (
+   undef, 'Label',
+   -text => "File browser"
+  );
+
+sub listbox_callback()
+{
+    my $listbox = shift;
+    my $label = $listbox->parent->getobj('listboxlabel');
+    my @sel = $listbox->get;
+    @sel = ('<none>') unless @sel;
+    my $sel = "selected: " . join (", ", @sel);
+    $label->text($listbox->title . " $sel");
+}
+
+$w{$FILE_SC}->add(
+    undef, 'Listbox',
+    -y          => 8,
+    -padbottom  => 2,
+    -values     => $values,
+    -labels     => $labels,
+    -width      => 20,
+    -border     => 1,
+    -title      => 'Listbox',
+    -vscrollbar => 1,
+    -onchange   => \&listbox_callback,
+);
+
+$w{$FILE_SC}->add(
+    undef, 'Listbox',
+    -y          => 8,
+    -padbottom  => 2,
+    -x          => 21,
+    -values     => $values,
+    -labels     => $labels,
+    -width      => 20,
+    -border     => 1,
+    -multi      => 1,
+    -title      => 'Multi-select',
+    -vscrollbar => 1,
+    -onchange   => \&listbox_callback,
+);
+
+$w{$FILE_SC}->add(
+    undef, 'Radiobuttonbox',
+    -y          => 8,
+    -padbottom  => 2,
+    -x          => 42,
+    -values     => $values,
+    -labels     => $labels,
+    -width      => 20,
+    -border     => 1,
+    -title      => 'Radiobuttonbox',
+    -vscrollbar => 1,
+    -onchange   => \&listbox_callback,
+);
+
+$w{$FILE_SC}->add(
+    'listboxlabel', 'Label',
+    -y => -1,
+    -bold => 1,
+    -text => "Select any option in one of the listboxes please....",
+    -width => -1,
+);
+
+# ----------------------------------------------------------------------
+# Popupmenu
+# ----------------------------------------------------------------------
+
+# $w{6}->add(
+#     undef, 'Label',
+#     -text => "The popmenu is much like a standard listbox. The difference is\n"
+#            . "that only the currently selected value is visible (or ---- if\n"
+# 	   . "no value is yet selected). The list of possible values will be\n"
+# 	   . "shown as a separate popup windows if requested.\n"
+# 	   . "Press <ENTER> or <CURSOR-RIGHT> to open the popupbox and use\n"
+# 	   . "those same keys to select a value (or use <CURSOR-LEFT> to close\n"
+# 	   . "the popup listbox without selecting a value from it). Press\n"
+# 	   . "</> in the popup for a 'less'-like search through the list."
+# );
+
+# $w{6}->add(
+#     undef, 'Popupmenu',
+#     -y          => 9,
+#     -values     => $values,
+#     -labels     => $labels,
+#     -width      => 20,
+#     -onchange   => sub {
+#         my $pm = shift;
+# 	my $lbl = $pm->parent->getobj('popupmenulabel');
+# 	my $val = $pm->get;
+# 	$val = "<undef>" unless defined $val;
+# 	my $lab = $pm->{-labels}->{$val};
+# 	$val .= " (label = '$lab')" if defined $lab;
+# 	$lbl->text($val);
+# 	$lbl->draw;
+#     },
+# );
+
+# $w{6}->add(
+#     undef, 'Label', -y => 9, -x => 21,
+#     -text       => "--- selected --->"
+# );
+
+# $w{6}->add(
+#     'popupmenulabel', 'Label',
+#     -y => 9, -x => 39, -width => -1,
+#     -bold => 1,
+#     -text       => "none"
+# );
+
+# # ----------------------------------------------------------------------
+# # Progressbar
+# # ----------------------------------------------------------------------
+
+# $w{7}->add( 
+#     'progressbarlabel', 'Label',
+#     -x => -1, -y => 3, -width => 10, -border => 1,
+#     -text => "the time"
+# );
+
+# $w{7}->add(
+#     undef, 'Label',
+#     -text => "The progressbar can be used to provide some progress information\n"
+#            . "to the user of a program. Progressbars can be drawn in several\n"
+# 	   . "ways (see below for a couple of examples). In this example, I\n"
+# 	   . "just built a kind of clock (the values for the bars are \n"
+# 	   . "depending upon the current time)."
+# );
+
+# $w{7}->add( undef, "Label", -y => 7, -text => "Showing value");
+# $w{7}->add( 'p1', 'Progressbar', -max => 24, 
+#             -x => 15, -y => 6,  -showvalue    => 1 );
+
+# $w{7}->add( undef, "Label", -y => 10, -text => "No centerline");
+# $w{7}->add( 'p2', 'Progressbar', -max => 60, 
+#             -x => 15, -y => 9, -nocenterline => 1 );
+
+# $w{7}->add( undef, "Label", -y => 13, -text => "No percentage");
+# $w{7}->add( 'p3', 'Progressbar', -max => 60, 
+#             -x => 15, -y => 12, -nopercentage => 1 );
+
+# sub progressbar_timer_callback($;)
+# {
+#     my $Cui = shift;
+#     my @l = localtime;
+#     $w{7}->getobj('p1')->pos($l[2]);
+#     $w{7}->getobj('p2')->pos($l[1]);
+#     $w{7}->getobj('p3')->pos($l[0]);
+#     $w{7}->getobj('progressbarlabel')->text(
+#          sprintf("%02d:%02d:%02d", @l[2,1,0])
+#     );
+# }
+
+# $Cui->set_timer(
+#     'progressbar_demo',
+#     \&progressbar_timer_callback, 1
+# );
+# $Cui->disable_timer('progressbar_demo');
+
+# $w{7}->onFocus( sub{$Cui->enable_timer  ('progressbar_demo')} );
+# $w{7}->onBlur(  sub{$Cui->disable_timer ('progressbar_demo')} );
+
+# # ----------------------------------------------------------------------
+# # Calendar
+# # ----------------------------------------------------------------------
+
+# $w{8}->add(
+#     undef, 'Label',
+#     -text => "The calendar can be used to select a date, somewhere between\n"
+#            . "the years 0 and 9999. It honours the transition from the\n"
+# 	   . "Julian- to the Gregorian calender in 1752."
+# );
+
+# $w{8}->add(
+#     undef, 'Label',
+#     -y => 5, -x => 27,
+#     -text => "Use your cursor keys (or <H>, <J>, <K> and <L>)\n"
+#            . "to walk through the calender. Press <ENTER>\n"
+# 	   . "or <SPACE> to select a date. Press <SHIFT+J> to\n"
+# 	   . "go one month forward and <SHIFT+K> to go one\n"
+# 	   . "month backward. Press <SHIFT+L> or <N> to go one\n"
+# 	   . "year forward and <SHIFT+H> or <P> to go one year\n"
+# 	   . "backward. Press <T> to go to today's date. Press\n"
+# 	   . "<C> to go to the currently selected date."
+# );
+
+# $w{8}->add(
+#     'calendarlabel', 'Label',
+#     -y => 14, -x => 27,
+#     -bold => 1,
+#     -width => -1,
+#     -text => 'Select a date please...'
+# );
+
+# $w{8}->add(
+#     'calendar', 'Calendar',
+#     -y => 4, -x => 0,
+#     -border => 1,
+#     -onchange => sub {
+#         my $cal = shift;
+# 	my $label = $cal->parent->getobj('calendarlabel'); 
+# 	$label->text("You selected the date: " . $cal->get);
+#     },
+# );
+
+# # ----------------------------------------------------------------------
+# # Dialog::Basic
+# # ----------------------------------------------------------------------
+
+# $w{9}->add(
+#     undef, 'Label',
+#     -text => "Curses::UI has a number of ready-to-use dialog windows.\n"
+#            . "The basic dialog is one of them. It consists of a dialog\n"
+# 	   . "showing a message and one or more buttons. Press the\n"
+# 	   . "buttons to see some examples of this."
+# );
+
+
+# $w{9}->add(
+#     undef, 'Buttonbox',
+#     -y => 7,    
+#     -buttons => [
+#          { 
+# 	   -label => "< Example 1 >",
+# 	   -onpress => sub {
+# 	       shift()->root->dialog("As basic as it gets")
+# 	   } 
+# 	 },{ 
+# 	   -label => "< Example 2 >",
+# 	   -onpress => sub {
+# 	       shift()->root->dialog(
+# 	           -message => "Basic, but carrying a\n"
+# 		             . "title this time.",
+#                    -title   => 'Dialog::Basic demo',
+# 	       );
+# 	   } 
+# 	 },{ 
+# 	   -label => "< Example 3 >",
+# 	   -onpress => sub {
+# 	       my $b = shift();
+# 	       my $value = $b->root->dialog(
+# 	           -message => "Basic, but carrying a\n"
+# 		             . "title and multiple buttons.",
+#                    -buttons => ['ok','cancel', 'yes', 'no'],
+#                    -title   => 'Dialog::Basic demo',
+# 	       );
+# 	       $b->root->dialog(
+# 	           -message => "The value for that\n"
+# 		             . "button was: $value",
+# 		   -title   => "Value?"
+# 	       );
+# 	   } 
+#          }
+#     ],
+# );
+
+# # ----------------------------------------------------------------------
+# # Dialog::Error
+# # ----------------------------------------------------------------------
+
+# $w{10}->add(
+#     undef, 'Label',
+#     -text => "Curses::UI has a number of ready-to-use dialog windows.\n"
+#            . "The Error dialog is one of them. It consists of a dialog\n"
+# 	   . "showing an errormessage, an ASCII art exclamation sign\n"
+# 	   . "and one or more buttons. Press the buttons to see some\n"
+# 	   . "examples of this."
+# );
+
+# $w{10}->add(
+#     undef, 'Buttonbox',
+#     -y => 7,    
+#     -buttons => [
+#          { 
+# 	   -label => "< Example 1 >",
+# 	   -onpress => sub {
+# 	       shift()->root->error("Some error occurred, I guess...")
+# 	   } 
+# 	 },{ 
+# 	   -label => "< Example 2 >",
+# 	   -onpress => sub {
+# 	       shift()->root->error(
+# 	           -message => "Unfortunately this program is\n"
+# 		             . "unable to cope with the enless\n"
+# 			     . "stream of bugs the programmer\n"
+# 			     . "has induced!!!!",
+#                    -title   => 'Serious trouble',
+# 	       );
+# 	   } 
+# 	 },{ 
+# 	   -label => "< Example 3 >",
+# 	   -onpress => sub {
+# 	       my $b = shift();
+# 	       my $value = $b->root->error(
+# 	           -message => "General error somewhere in the program\n"
+# 		             . "Are you sure you want to continue?",
+#                    -buttons => ['yes', 'no'],
+#                    -title   => 'Vague problem detected',
+# 	       );
+# 	       $b->root->dialog(
+# 	           -message => "You do " . ($value?'':'not ')
+# 		             . "want to continue.",
+# 		   -title   => "What did you answer?"
+# 	       );
+# 	   } 
+#          }
+#     ],
+# );
+
+# # ----------------------------------------------------------------------
+# # Dialog::Filebrowser
+# # ----------------------------------------------------------------------
+
+# $w{11}->add(
+#     undef, 'Label',
+#     -text => "Curses::UI has a number of ready-to-use dialog windows.\n"
+#            . "The Filebrowser dialog is one of them. Using this dialog\n"
+# 	   . "it is possible to select a file anywhere on the file-\n"
+# 	   . "system. Press the buttons below for a demo"
+# );
+
+# $w{11}->add(
+#     undef, 'Buttonbox',
+#     -y => 7,    
+#     -buttons => [
+#          { 
+# 	   -label => "< Load file >",
+# 	   -onpress => sub {
+# 	      my $Cui = shift()->root;
+# 	      my $file = $Cui->loadfilebrowser(
+# 	          -title => "Select some file",
+# 		  -mask  => [
+# 		      ['.',      'All files (*)'      ],
+#                       ['\.txt$', 'Text files (*.txt)' ],
+# 		      ['\.pm$',  'Perl modules (*.pm)'],
+# 		  ],
+#               );
+# 	      $Cui->dialog("You selected the file:\n$file")
+# 	         if defined $file;
+# 	   }
+#          },{ 
+# 	   -label => "< Save file (is fake) >",
+# 	   -onpress => sub {
+# 	      my $Cui = shift()->root;
+# 	      my $file = $Cui->savefilebrowser("Select some file");
+# 	      $Cui->dialog("You selected the file:\n$file")
+# 	         if defined $file;
+# 	   }
+#          }
+#     ]
+# );
+
+# # ----------------------------------------------------------------------
+# # Dialog::Progress
+# # ----------------------------------------------------------------------
+
+# $w{12}->add(
+#     undef, 'Label',
+#     -text => "Curses::UI has a number of ready-to-use dialog windows.\n"
+#            . "The Progress dialog is one of them. Using this dialog\n"
+# 	   . "it is possible to present some progress information to\n"
+# 	   . "the user. Press the buttons below for a demo."
+# );
+
+# $w{12}->add(
+#     undef, 'Buttonbox',
+#     -y => 7,    
+#     -buttons => [
+#          { 
+# 	   -label => "< Example 1 >",
+# 	   -onpress => sub {
+# 		$Cui->progress(
+# 		    -min => 0,
+# 		    -max => 700,
+# 		    -title => 'Progress dialog without a message',
+# 		    -nomessage => 1,
+# 		);
+
+# 		for my $pos (0..700) {
+# 		    $Cui->setprogress($pos);
+# 		}
+# 		sleep 1;
+# 		$Cui->noprogress;
+# 	   }
+#          },{ 
+# 	   -label => "< Example 2 >",
+# 	   -onpress => sub {
+# 	        my $msg = "Counting from 0 to 700...\n";
+# 		$Cui->progress(
+# 		    -min => 0,
+# 		    -max => 700,
+# 		    -title => 'Progress dialog with a message',
+# 		    -message => $msg,
+# 		);
+
+# 		for my $pos (0..700) {
+# 		    $Cui->setprogress($pos, $msg . $pos . " / 700");
+# 		}
+# 		$Cui->setprogress(undef, "Finished counting!");
+# 		sleep 1;
+# 		$Cui->noprogress;
+# 	   }
+#          }
+#     ]
+# );
+
+# # ----------------------------------------------------------------------
+# # Dialog::Status
+# # ----------------------------------------------------------------------
+
+# $w{13}->add(
+#     undef, 'Label',
+#     -text => "Curses::UI has a number of ready-to-use dialog windows.\n"
+#            . "The Status dialog is one of them. Using this dialog\n"
+# 	   . "it is possible to present some status information to\n"
+# 	   . "the user. Press the buttons below for a demo."
+# );
+
+# $w{13}->add(
+#     undef, 'Buttonbox',
+#     -y => 7,    
+#     -buttons => [
+#          { 
+# 	   -label => "< Example 1 >",
+# 	   -onpress => sub {
+# 		$Cui->status("This is a status dialog...");
+# 		sleep 1;
+# 		$Cui->nostatus;
+# 	   }
+#          },{ 
+# 	   -label => "< Example 2 >",
+# 	   -onpress => sub {
+# 		$Cui->status("A status dialog can contain\n"
+# 		           . "more than one line, but that is\n"
+# 			   . "about all that can be told about\n"
+# 			   . "status dialogs I'm afraid :-)"
+#                 );
+# 		sleep 3;
+# 		$Cui->nostatus;
+# 	   }
+#          }
+#     ]
+# );
+
+# # ----------------------------------------------------------------------
+# # Dialog::Calendar
+# # ----------------------------------------------------------------------
+
+# $w{14}->add(
+#     undef, 'Label',
+#     -text => "Curses::UI has a number of ready-to-use dialog windows.\n"
+#            . "The calendar dialog is one of them. Using this dialog\n"
+# 	   . "it is possible to select a date."
+# );
+
+# $w{14}->add( undef,  'Label', -y => 7, -text => 'Date:' );
+# $w{14}->add( 
+#     'datelabel', 'Label', 
+#     -width => 10, 
+#     -y => 7, 
+#     -x => 6, 
+#     -text => 'none',
+# );
+
+# $w{14}->add(
+#     undef, 'Buttonbox',
+#     -y => 7,    
+#     -x => 17,
+#     -buttons => [
+#          { 
+# 	   -label => "< Set date >",
+# 	   -onpress => sub { 
+# 	       my $label = shift()->parent->getobj('datelabel');
+# 	       my $date = $label->get;
+# 	       print STDERR "$date\n";
+# 	       $date = undef if $date eq 'none';
+# 	       my $return = $Cui->calendardialog(-date => $date);
+# 	       $label->text($return) if defined $return;
+# 	   }
+#          },{
+# 	   -label => "< Clear date >",
+# 	   -onpress => sub {
+# 	       my $label = shift()->parent->getobj('datelabel');
+# 	       $label->text('none');
+# 	   }
+# 	 }
+#     ]
+# );
+
+# # ----------------------------------------------------------------------
+# # Dialog::Question
+# # ----------------------------------------------------------------------
+
+# $w{15}->add(
+#     undef, 'Label',
+#     -text => "Curses::UI has a number of ready-to-use dialog windows.\n"
+#            . "The question dialog is one of them. Using this dialog\n"
+# 	   . "it is possible to prompt the user to enter an answer.",
+# );
+
+# $w{15}->add(
+#     undef, 'Buttonbox',
+#     -y => 7,    
+#     -buttons => [
+#          { 
+# 	   -label => "< Example 1 >",
+# 	   -onpress => sub {
+#                my $button = shift;
+# 	       my $feeling = $button->root->question("How awesome are you?");
+#                if ($feeling) {
+#                    $button->root->dialog("You answered '$feeling'");
+#                }
+#                else {
+#                    $button->root->dialog("Question cancelled.");
+#                }
+# 	   } 
+# 	 },{ 
+# 	   -label => "< Example 2 >",
+# 	   -onpress => sub {
+#                my $button = shift;
+# 	       my $feeling = $button->root->question(
+# 	           -question => "How does coffee make you feel?",
+#                    -title    => 'Dialog::Question example',
+# 	       );
+#                if ($feeling) {
+#                    $button->root->dialog("You answered '$feeling'");
+#                }
+#                else {
+#                    $button->root->dialog("Question cancelled.");
+#                }
+# 	   } 
+# 	 },{ 
+# 	   -label => "< Example 3 >",
+# 	   -onpress => sub {
+#                my $button = shift;
+# 	       my $feeling = $button->root->question(
+# 	           -question => "How does coffee make you feel?",
+#                    -title    => 'Dialog::Question example',
+#                    -answer   => "Really good.",
+# 	       );
+#                if ($feeling) {
+#                    $button->root->dialog("You answered '$feeling'");
+#                }
+#                else {
+#                    $button->root->dialog("Question cancelled.");
+#                }
+# 	   } 
+#          }
+#     ],
+# );
+
+
+# ----------------------------------------------------------------------
+# Setup bindings and focus 
+# ----------------------------------------------------------------------
+
+# Bind <CTRL+Q> to quit.
+$Cui->set_binding( sub{ exit }, "\cQ" );
+
+# Bind <CTRL+X> to menubar.
+$Cui->set_binding( sub{ shift()->root->focus('main menu') }, "\cX" );
+
+
+$Cui->set_binding( \&goto_prev_demo, "\cP" );
+
+$w{$MAIN_SC}->focus;
+
+
+# ----------------------------------------------------------------------
+# Get things rolling...
+# ----------------------------------------------------------------------
+
+$Cui->mainloop;
+
