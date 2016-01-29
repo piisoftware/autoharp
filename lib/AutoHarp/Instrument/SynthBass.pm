@@ -16,13 +16,13 @@ sub choosePatch {
 sub play {
   my $self = shift;
   my $segment = shift;
-  if (!$segment->music->hasProgression()) {
+  if (!$segment->musicBox->hasProgression()) {
     return $self->SUPER::play($segment);
   }
   my $bassLine = AutoHarp::Events::Melody->new();
   $bassLine->time($segment->time);
-  foreach my $c (@{$segment->music->progression->chords}) {
-    my $clock = $segment->music->clockAt($c->time);
+  foreach my $c (@{$segment->musicBox->progression->chords}) {
+    my $clock = $segment->musicBox->clockAt($c->time);
     $bassLine->add($self->eighthNoteBass($c,$clock));
   }
 

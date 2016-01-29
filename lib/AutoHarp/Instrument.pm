@@ -47,6 +47,20 @@ my $INSTRUMENTS_THAT_SOUND_LIKE_ASS =
    109 => 'fuck you, bagpipe',
   };
 
+sub Classes {
+  return [
+	  $DRUM_LOOP,
+	  $BASS_INSTRUMENT,
+	  "freestyleBass",
+	  "synthBass",
+	  $RHYTHM_INSTRUMENT,
+	  $PAD_INSTRUMENT,
+	  $LEAD_INSTRUMENT,
+	  $HOOK_INSTRUMENT,
+	  $THEME_INSTRUMENT
+	 ];
+}
+
 sub new {
   my $class = shift;
   my $args  = {@_};
@@ -122,13 +136,9 @@ sub fromString {
 sub band {
   my $class = shift;
   my $band = {};
-  my @i = ($DRUM_LOOP,
-	   $BASS_INSTRUMENT,
-	   $RHYTHM_INSTRUMENT,
-	   $PAD_INSTRUMENT,
-	   $LEAD_INSTRUMENT,
-	   $HOOK_INSTRUMENT);
-  my $themes = pickOne(1,2,3);
+  my $themes = pickOne(1,2);
+  my @i = grep {!/(\w+)Bass/} @{AutoHarp::Instrument::Classes()};
+  
   for (1..$themes) {
     push(@i, $THEME_INSTRUMENT);
   }
@@ -154,6 +164,12 @@ sub toString {
 
 sub instrumentClass {
   return $_[0]->{$ATTR_INSTRUMENT_CLASS};
+}
+
+sub formattedName {
+  return sprintf("%-8s (%s)",
+		 $_[0]->{$ATTR_INSTRUMENT_CLASS},
+		 $_[0]->name);
 }
 
 #is this a known sub-class of instrument?
@@ -269,7 +285,7 @@ sub decideSegment {
   my $self         = shift;
   my $segment      = shift;
 
-  if (!$segment->music) {
+  if (!$segment->hasMusicBox()) {
     confess "Passed a segment without music! Why did that happen?";
   } elsif ($self->isPlaying() && !$segment->isChange()) {
     #all instruments keep playing if they were playing and 
@@ -346,6 +362,14 @@ sub transition {
       }
     }
   }
+}
+
+sub attributes {
+  return [];
+}
+
+sub attributeValues {
+  return [];
 }
 
 #FROM MIDI.pm

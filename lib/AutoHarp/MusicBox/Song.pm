@@ -28,10 +28,10 @@ sub CompositionFromDataStructure {
   my $ds = shift;
   my $comp = [];
   foreach my $d (@$ds) {
-    my $e = AutoHarp::Composer::CompositionElement
+    my $e = AutoHarp::Composer::CompositionElement->new
       (
        {$ATTR_TAG => $d->{$ATTR_TAG},
-	$ATTR_MUSIC => $d->{$ATTR_MUSIC},
+	$SONG_ELEMENT => $d->{$SONG_ELEMENT},
 	$SONG_ELEMENT_TRANSITION => $d->{$SONG_ELEMENT_TRANSITION}
        }
       );
@@ -60,7 +60,7 @@ sub toDataStructure {
       if ($nextData) {
 	confess "Found first half segment without having completed a previous segment, cannot convert song to data";
       }
-      $nextData = {$ATTR_TAG   => $segment->tag(),
+      $nextData = {$ATTR_TAG   => $segment->songElement(),
 		   $ATTR_MUSIC => $segment->musicTag(),
 		   $FIRST_HALF => $performers,
 		   $FIRST_UID  => $segment->uid()
@@ -68,7 +68,7 @@ sub toDataStructure {
     } elsif ($segment->isSecondHalf) {
       if (!$nextData || !$nextData->{$FIRST_HALF}) {
 	confess "Invalid segments constructed, cannot build data structure";
-      } elsif ($nextData->{$ATTR_TAG} != $segment->tag() ||
+      } elsif ($nextData->{$ATTR_TAG} != $segment->songElement() ||
 	       $nextData->{$ATTR_MUSIC} != $segment->musicTag()) {
 	confess "Second half segment doesn't match first half segment, cannot build data structure";
       } 
@@ -78,7 +78,7 @@ sub toDataStructure {
       push(@$ds,$nextData);
       undef $nextData;
     } else {
-      push(@$ds,{$ATTR_TAG => $segment->tag(),
+      push(@$ds,{$ATTR_TAG => $segment->songElement(),
 		 $ATTR_MUSIC => $segment->musicTag(),
 		 $PLAYERS => $performers,
 		 $SONG_ELEMENT_TRANSITION => $segment->transitionOut(),
@@ -119,7 +119,7 @@ sub retimeSegments {
     my $startTime = $startSeg->time;
     my $soundTime = $startSeg->soundingTime;
     if ($soundTime < 0) {
-      $startTime = $startSeg->music->clock->roundToNextMeasure(abs($soundTime));
+      $startTime = $startSeg->musicBox->clock->roundToNextMeasure(abs($soundTime));
     }
     my $counter = 0;
     foreach my $seg (@{$self->segments()}) {
@@ -174,7 +174,7 @@ sub eachMeasure {
   my $self = shift;
   my $m = [];
   foreach my $s (@{$self->segments()}) {
-    my $ms  = $s->music->eachMeasure();
+    my $ms  = $s->musicBox->eachMeasure();
     push(@$m,@$ms) if (scalar @$ms);
   }
   return $m;
@@ -187,16 +187,16 @@ sub guide {
     if ($guide->isEmpty()) {
       #steal clock and scale events from the first segment and put them
       #at time 0. Mark it as the beginning of the song
-      $guide->setClock($segment->music()->clock(),0);
-      $guide->setScale($segment->music()->scale(),0);
+      $guide->setClock($segment->musicBox()->clock(),0);
+      $guide->setScale($segment->musicBox()->scale(),0);
     } 
     #remove all non-clock non-text, non-key events
     my $g = [grep {!$_->isText() &&
 		     ($_->isClock() || 
-		      $_->isScale())} @{$segment->music->guide}];
+		      $_->isScale())} @{$segment->musicBox->guide}];
     $guide->add($g) if (scalar @$g);
     if ($segment->isChange()) {
-      my $sTxt = $segment->tag();
+      my $sTxt = $segment->songElement();
       if ($segment->elementIndex > 1 || 
 	  $segment->isChorus() || 
 	  $segment->isVerse()) {
@@ -227,9 +227,9 @@ sub scores {
   $self->retimeSegments();
   
   foreach my $segment (@{$self->segments}) {
-    printf "%2d) %12s. Players: ",$idx,$segment->tag if ($talk);
+    printf "%2d) %12s. Players: ",$idx,$segment->songElement if ($talk);
     if ($segment->soundingTime < 0) {
-      confess sprintf("Sounding time of segment %s, time %d is %d",$segment->tag(),$segment->time(),$segment->soundingTime());
+      confess sprintf("Sounding time of segment %s, time %d is %d",$segment->songElement(),$segment->time(),$segment->soundingTime());
     }
     my $perfs = $segment->playerPerformances();
     my @playList;
@@ -246,7 +246,7 @@ sub scores {
 	$sHash->{$instId}->add($performance);
 	if ($sHash->{$instId}->soundingTime < 0) {
 	  $performance->dump();
-	  confess sprintf("Adding performance of %s to segment %s (%d) caused it to have a negative sounding time",$instId,$segment->tag,$segment->time);
+	  confess sprintf("Adding performance of %s to segment %s (%d) caused it to have a negative sounding time",$instId,$segment->songElement(),$segment->time);
 	}
       }
     }
@@ -375,8 +375,8 @@ sub dump {
   foreach my $segment (@{$self->segments}) {
     printf "ticks %5d: %s (%s), reach %d\n",
       $segment->time,
-	$segment->music->name,
-	  $segment->tag,
+	$segment->musicBox->name,
+	  $segment->songElement(),
 	    $segment->reach; 
   }
 }

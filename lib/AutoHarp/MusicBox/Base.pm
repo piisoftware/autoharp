@@ -279,6 +279,19 @@ sub truncate {
   } 
 }
 
+sub getMusicForMeasures {
+  my $self = shift;
+  my $from = shift;
+  my $to   = shift;
+  if ($from >= 1 && $to >= $from) {
+    my $measures = $self->eachMeasure();
+    my $startTime = $measures->[$from - 1];
+    my $endTime   = ($to < scalar @$measures) ? $measures->[$to] : $self->reach();
+    return $self->subMusic($startTime,$endTime);
+  }
+  confess "Invalid values $from and $to passed to getMusicForMeasures";
+}
+
 sub subMusic {
   my $self  = shift;
   my $from  = shift;
@@ -340,6 +353,10 @@ sub measures {
     return $self->setMeasures($arg);
   }
   return $self->{$ATTR_GUIDE}->measures();
+}
+
+sub bars {
+  return $_[0]->measures($_[1]);
 }
 
 #how long will this music play?

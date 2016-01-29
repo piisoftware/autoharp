@@ -18,6 +18,7 @@ use AutoHarp::Clock;
 use AutoHarp::Scale;
 use AutoHarp::Fuzzy;
 use AutoHarp::Config;
+use AutoHarp::MusicBox::Song::Segment;
 
 #   make KEY_BTAB (shift-tab) working in XTerm
 #   and also at the same time enable colors
@@ -32,10 +33,12 @@ if (@ARGV and $ARGV[0] eq '-d') {
 open(STDERR, ">>/tmp/autoprotoerr.log") or die "Can't divert STDERR: $!";
 
 
-my $Cui = new Curses::UI ( 
-    -clear_on_exit => 1, 
-    -debug => $debug,
-);
+my $Cui = new Curses::UI
+  ( 
+   -clear_on_exit => 1, 
+   -debug => $debug,
+   -mouse_support => 1
+  );
 
 # Window Idx
 my $winIdx = 1;
@@ -43,22 +46,37 @@ my $winIdx = 1;
 # Demo windows
 my %w = ();
 
+my $SongElements = $SONG_ELEMENTS;
 my $Genres = AutoHarp::Model::Genre->all();
-my $Clock = AutoHarp::Clock->new();
-my $Scale = AutoHarp::Scale->new();
-my $Genre = AutoHarp::Model::Genre->new('Electronic');
-my $Bars  = 8;
+my $Clock  = AutoHarp::Clock->new();
+my $Scale  = AutoHarp::Scale->new();
+my $Genre  = AutoHarp::Model::Genre->new('Electronic');
+my $Bars   = 8;
+my $Band   = AutoHarp::Instrument->band();
+my $Composer = AutoHarp::Composer->new();
+my $Generator = AutoHarp::Generator->new();
+my $Conductor = AutoHarp::Conductor->new();
+my $MusicTags = [$SONG_ELEMENT_VERSE, $SONG_ELEMENT_CHORUS, $SONG_ELEMENT_BRIDGE];
+if (sometimes()) {
+  push(@$MusicTags, $SONG_ELEMENT_PRECHORUS);
+}
 
-my $MAIN_SC = 'Main';
-my $INST_SC = 'Inst';
+my $MAIN_SC = 'Settings';
+my $INST_SC = 'Orchestra';
+my $INST_EDIT_SC = 'EditInstrument';
+my $COMP_EDIT_SC = 'EditSongComponent';
 my $ARNG_SC = 'Arrangement';
 my $COMP_SC = 'Compose';
 my $FILE_SC = 'FileBrowser';
 
+my $PAD_TOP = 2;
+my $PAD_BOT = 3;
+my $I_PAD   = 1;
+
 my %screens =
   (
    $MAIN_SC => 'Settings',
-   $INST_SC => 'Instruments',
+   $INST_SC => 'Orchestra',
    $ARNG_SC => 'Arrangement',
    $COMP_SC => 'Compose',
    $FILE_SC => 'File Browser'
@@ -88,6 +106,43 @@ my $menu = $Cui->add
    -fg  => "blue",
   );
 
+sub indexOf {
+  my $array = shift;
+  my $val   = shift;
+  my $idx   = -1;
+  for(my $i = 0; $i < scalar @$array; $i++) {
+    if ($array->[$i] eq $val) {
+      $idx = $i;
+      last;
+    }
+  }
+  return $idx
+}
+
+sub addToBand {
+  my $inst = shift;
+  my $uid = $inst->uid;
+  while (exists $Band->{$uid}) {
+    $uid .= "1" if ($uid !~ /\d+$/);
+    $uid++;
+  }
+  $inst->uid($uid);
+  $Band->{$uid} = $inst;
+  return $uid;
+}
+
+sub completeSongElements {
+  my $composition = shift;
+  foreach my $c (@$composition) {
+    if (!scalar grep {$_ eq $c->songElement()} @$SongElements) {
+      push(@$SongElements, $c->songElement());
+    }
+  }
+}
+
+sub newSegment {
+  my $tag = shift || $SONG_ELEMENT_VERSE;
+  
 sub alert {
   my $text = shift;
   $Cui->dialog(
@@ -104,6 +159,16 @@ sub inform {
 	       -title     => "Hey there:"
 	       -buttons   => ['ok'],
 	      );
+}
+
+sub trueHeight {
+  my $widget = shift;
+  return $widget->height - (2 * $I_PAD) - $PAD_TOP - $PAD_BOT - 1;
+}
+
+sub trueWidth {
+  my $widget = shift;
+  return $widget->height - (2 * $I_PAD) - 2;
 }
 
 sub select_screen($;)
@@ -152,40 +217,51 @@ my $w0 = $Cui->add(
     -height        => 3,
 );
 $w0->add('explain', 'Label', 
-  -text => "CTRL+X: menu  CTRL+Q: quit"
+  -text => "^X: top menu ^G: Globals, ^O: Orchestra, ^Q: quit"
 );
 
-my %args = (
-    -border       => 1, 
-    -titlereverse => 0, 
-    -padtop       => 2, 
-    -padbottom    => 3, 
-    -ipad         => 1,
-);
+sub build {
+  my $screen = shift;
+  my $focusWhenDone = shift;
+  my $data = shift;
+  my $winId = $screen . "_window";
+  if ($w{$screen}) {
+    $w{$screen}->parent()->delete($winId)
+  }
 
-while (my ($nr, $title) = each %screens) {
-  my $id = "window_$nr";
-  $w{$nr} = $Cui->add
+  $w{$screen} = $Cui->add
     (
-     $id, 'Window', 
-     -title => $title,
-     %args
+     $winId, 'Window', 
+     -title => $screens{$screen},
+     -border       => 1, 
+     -titlereverse => 0, 
+     -padtop       => $PAD_TOP, 
+     -padbottom    => $PAD_BOT, 
+     -ipad         => $I_PAD,
+     -vscrollbar => 1
     );
+  my $f = "_build$screen";
+  no strict 'refs';
+  $f->($w{$screen},$data);
+  if ($focusWhenDone) {
+    $w{$screen}->focus()
+  }
 }
 
-# ----------------------------------------------------------------------
-# MAIN (Settings) SCREEN
-# ----------------------------------------------------------------------
-
-{
-  my $M = $w{$MAIN_SC};
-  my $yc = 0;
   #$w{$MAIN_SC}->add(undef,'Label',-text=>"dim font",-y=>5,-dim=>1 );
   #$w{$MAIN_SC}->add(undef,'Label',-text=>"bold font",-y=>7,-bold=>1 );
   #$w{$MAIN_SC}->add(undef,'Label',-text=>"reversed font",-y=>9,-reverse => 1 );
   #$w{$MAIN_SC}->add(undef,'Label',-text=>"underlined font",-x=>15,-y=>5,-underline=>1 );
   #$w{$MAIN_SC}->add(undef,'Label',-text=>"blinking font",-x=>15,-y=>7,-blink=>1 );
 
+
+# ----------------------------------------------------------------------
+# MAIN (Settings) SCREEN
+# ----------------------------------------------------------------------
+
+sub _buildSettings {
+  my $M = shift;
+  my $yc = 0;
   $M->add(undef, 'Label', -y => $yc++, -bold => 1,
 	  -text => "AUTOHARP SONG LAB (PROTOTYPE)");
   $M->add(undef, 'Label', -y => $yc++, -underlined => 1,
@@ -276,19 +352,15 @@ while (my ($nr, $title) = each %screens) {
        }
      }
     );
-  last;
+  return;
   $M->add(undef, 'Label', -y => $yc, -text => "Genre:");
-  my $sel = 0;
-  for(; $sel < scalar @$Genres; $sel++) {
-    last if ($Genre->id == $Genres->[$sel]->id);
-  }
   
   $M->add(
     undef, 'Popupmenu',
 	  -y          => $yc++,
 	  -values     => [map {$_->id} @$Genres],
 	  -labels     => [map {$_->name} @$Genres],
-	  -selected   => $sel,
+	  -selected   => indexOf([map {$_->id} @$Genres],$Genre->id),
 	  -width      => 20,
 	  -onchange   => sub {
 	    my $self = shift;
@@ -304,169 +376,523 @@ while (my ($nr, $title) = each %screens) {
 }
 
 # ----------------------------------------------------------------------
-# Instruments Window
+# Orchestra Window
 # ----------------------------------------------------------------------
 
-$w{$INST_SC}->add
-  (
-   undef, 'Label',
-   -text => "This is the instrument screen"
-  );
-
-$w{$INST_SC}->add(
-    'buttonlabel', 'Label',
-    -y => 7,
-    -width => -1,
-    -bold => 1,
-    -text => "Press a button please...",
-);
-
-sub button_callback($;)
-{
-    my $this = shift;
-    my $label = $this->parent->getobj('buttonlabel');
-    $label->text("You pressed: " . $this->get);
+sub _buildOrchestra {
+  my $I = shift;
+  my $yc = 0;
+  $I->add
+    (
+     undef, 'Buttonbox',
+     -y => $yc++,
+     -buttons =>
+     [
+      {
+       -label => "< Add New >",
+       -value => 1, 
+       -onpress => sub {
+	 my $i = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $THEME_INSTRUMENT);
+	 addToBand($i);
+	 build($INST_SC,1);
+       }
+      },{
+	 -label => "< Regenerate All >", 
+	 -value => 2,
+	 -onpress => sub {
+	   $Band = AutoHarp::Instrument->band();
+	   build($INST_SC,1);
+	 }
+	}
+     ]
+    );
+  
+  foreach my $id
+    (sort {$Band->{$a}->instrumentClass() cmp $Band->{$b}->instrumentClass}
+     keys %$Band) {
+    my $inst = $Band->{$id};
+    $I->add(
+	    undef, 'Label',
+	    -y => $yc,
+	    -bold => 1,
+	    -text => substr($inst->formattedName,0,35)
+	   );
+    my $buttons =
+      [
+       {
+	-label => "< Delete >", 
+	-value => 2,
+	-onpress => sub {
+	  delete $Band->{$id};
+	  build($INST_SC,1);
+	}
+       }
+      ];
+    if (!$inst->isDrums()) {
+      unshift(@$buttons, {
+		       -label => "< Edit >",
+		       -value => 1, 
+		       -onpress => sub {
+			 build($INST_EDIT_SC,1,$inst)
+		       }
+		      });
+    }
+    $I->add
+      (
+       undef, 'Buttonbox',
+       -y => $yc++,
+       -x => 37,
+       -buttons => $buttons
+      );
+  }
 }
+# ----------------------------------------------------------------------
+# Edit Instrument
+# ---------------------------------------------------------------------
 
-$w{$INST_SC}->add(
-    undef, 'Buttonbox',
-    -y => 5,    
-    -buttons => [
-         {
-            -label => "< Button 1 >",
-        -value => "the first button", 
-        -onpress => \&button_callback, 
-        },{
-            -label => "< Button 2 >", 
-        -value => "the second button", 
-        -onpress => \&button_callback, 
-        },{
-            -label => "< Button 3 >", 
-        -value => "the third button", 
-        -onpress => \&button_callback, 
-        },    
-    ],
-);
+sub _buildEditInstrument {
+  my $E = shift;
+  my $inst = shift;
+  my $yc = 0;
+  my $classes = AutoHarp::Instrument::Classes();
+
+  $E->add(undef, 'Label', -y => $yc++, -bold => 1, -text => $inst->formattedName());
+  $yc++;
+  $E->add(undef, 'Label', -y => $yc, -text => "Class");
+  $E->add
+    (
+     undef, 'Popupmenu',
+     -y          => $yc++,
+     -x          => 8,
+     -values     => $classes,
+     -labels     => {map {$_ => $_} @$classes},
+     -selected   => indexOf($classes, $inst->instrumentClass),
+     -width      => 30,
+     -onchange   => sub {
+       my $self = shift;
+       my $new = AutoHarp::Instrument->new($ATTR_INSTRUMENT_CLASS => $self->get());
+       $new->patch($inst->patch);
+       delete $Band->{$inst->uid};
+       addToBand($new);
+       build($INST_SC);
+       build($INST_EDIT_SC,1,$new);
+     }
+    );
+
+  $E->add(undef, 'Label', -y => $yc, -text => "Patch");
+  $E->add
+    (
+     undef, 'TextEntry',
+     -sbborder => 1,
+     -y => $yc++,
+     -x => 8,
+     -width => 30,
+     -text => $inst->name,
+     -onBlur => sub {
+       my $self = shift;
+       my $was = $inst->patch();
+       my $v = $self->get();
+       eval {
+	 $inst->choosePatch($v);
+       };
+       if ($@) {
+	 alert("$v couldn't be parsed as a valid MIDI patch");
+	 $inst->patch($was);
+       } else {
+	 $self->text($inst->name);
+       }
+     }
+    );
+
+  foreach my $attr (@{$inst->attributes()}) {
+    my $vals = $inst->attributeValues($attr);
+    next if (!scalar @$vals);
+    
+    $E->add(undef, 'Label', -y => $yc, -text => $attr);
+    $E->add
+      (
+       undef, 'Popupmenu',
+       -y          => $yc++,
+       -x          => length($attr) + 1,
+       -values     => $vals,
+       -labels     => {map {$_ => $_} @$vals},
+       -selected   => indexOf($vals, $inst->scalarAccessor($attr)),
+       -width      => 30
+       -onchange   => sub {
+	 my $self = shift;
+	 $inst->scalarAccessor($attr,$self->get());
+       }
+      );
+  }
+
+  $E->add
+    (
+     undef, 'Buttonbox',
+     -y => $yc++,
+     -buttons =>
+     [
+      {
+       -label => "< Done >",
+       -value => 1, 
+       -onpress => sub {
+	 build($INST_SC, 1);
+       }
+      }
+     ]
+    );
+}
 
 # ----------------------------------------------------------------------
 # Arrange window
 # ----------------------------------------------------------------------
 
-$w{$ARNG_SC}->add
-  (
-   undef, 'Label',
-   -text => "Arrange"
-  );
-
-my $cb_no = "The checkbox says: I don't like it :-(";
-my $cb_yes = "The checkbox says: I do like it! :-)";
-
-$w{$ARNG_SC}->add(
-    'checkboxlabel', 'Label',
-    -y       => 8,
-    -width   => -1,
-    -bold    => 1,
-    -text    => "Check the checkbox please...",
-);
-
-$w{$ARNG_SC}->add(
-    undef, 'Checkbox',
-    -y => 6,
-    -checked => 0,
-    -label => 'I like this Curses::UI demo so far!',
-    -onchange => sub {
-        my $cb = shift;
-        my $label = $cb->parent->getobj('checkboxlabel'); 
-        $label->text($cb->get ? $cb_yes : $cb_no);
-    },
-);
+sub _buildArrange {
+  my $A = shift;
+  $A->add
+    (
+     undef, 'Label',
+     -text => "Arrange"
+    );
+  
+  my $cb_no = "The checkbox says: I don't like it :-(";
+  my $cb_yes = "The checkbox says: I do like it! :-)";
+  
+  $A->add(
+	  'checkboxlabel', 'Label',
+	  -y       => 8,
+	  -width   => -1,
+	  -bold    => 1,
+	  -text    => "Check the checkbox please...",
+	 );
+  
+  $A->add(
+	  undef, 'Checkbox',
+	  -y => 6,
+	  -checked => 0,
+	  -label => 'I like this Curses::UI demo so far!',
+	  -onchange => sub {
+	    my $cb = shift;
+	    my $label = $cb->parent->getobj('checkboxlabel'); 
+	    $label->text($cb->get ? $cb_yes : $cb_no);
+	  },
+	 );
+}
 
 # ----------------------------------------------------------------------
 # Compose Window
 # ----------------------------------------------------------------------
 
-$w{$COMP_SC}->add
-  (
-   undef, 'Label',
-   -text => "Compose"
-  );
+sub _buildCompose {
+  my $C = shift;
 
-$w{$COMP_SC}->add(
-    'te1', 'TextEditor',
-    -title => 'not wrapping',
-    -y => 5, -width => 20, -border => 1,
-    -padbottom => 4,
-    -vscrollbar => 1,
-    -hscrollbar => 1,
-    -onChange => sub {
-        my $te1 = shift;
-        my $te2 = $te1->parent->getobj('te2');
-        my $te3 = $te1->parent->getobj('te3');
-        $te2->text($te1->get);
-        $te3->text($te1->get);
-        $te2->pos($te1->pos);
-    },
-);
+  my $labelWidth = 15;
+  my $btnWidth   = 11;
+  my $colWidth   = $labelWidth + $btnWidth + 9;
+  my $cols = 3;
+  my $lines = trueHeight($C) - 5;
+  my $compLabel = ($Composer->hasComposition()) ? 'Recompose' : 'Compose';
+  my $comp = $Composer->composition();
+  completeSongElements($comp);
+  $C->add
+    (
+     undef, 'Buttonbox',
+     -y => 0,
+     -buttons =>
+     [
+      {
+       -label => "< New >",
+       -value => 1, 
+       -onpress => sub {
+	 my $self = shift;
+	 my $idx = 0;
+	 if (scalar @$comp) {
+	   $idx  = $self->root->question(-question => "Add after (0 == beginning)?",
+					 -answer => 0,
+					 -title => "Yo, question"
+					);
+	 }
+	 if ($idx == undef) {
+	   return;
+	 }
+	 my $mTag = ($comp->[$idx - 1]) ?
+	   $comp->[$idx - 1]->musicTag() : $SONG_ELEMENT_VERSE;
+	 my $se   = ($comp->[$idx - 1]) ?
+	   $comp->[$idx - 1]->songElement() : $SONG_ELEMENT_VERSE;
+	 my $elt = AutoHarp::Composer::CompositionElement({$ATTR_TAG => $mTag,
+							   $SONG_ELEMENT => $se
+							  });
+	 $Composer->addToComposition($elt,$idx);
+	 build($COMP_SC,1);
+       }
+      },{
+	 -label => "< $compLabel >", 
+	 -value => 2,
+	 -onpress => sub {
+	   $Composer->clearMusicTags();
+	   foreach my $e (@$MusicTags) {
+	     $Composer->addMusicTag($e);
+	   }
+	   $Composer->compose();
+	   printf STDERR "%d segments!\n",scalar @{$Composer->composition};
+	   build($COMP_SC,1);
+	 }
+	}
+     ]
+    );
 
-$w{$COMP_SC}->add(
-    'te2', 'TextEditor',
-    -title => 'wrapping',
-    -y => 5, -x => 21, -width => 20, -border => 1,
-    -padbottom => 4,
-    -vscrollbar => 1,
-    -hscrollbar => 1,
-    -wrapping => 1,
-    -onChange => sub {
-        my $te2 = shift;
-        my $te1 = $te2->parent->getobj('te1');
-        my $te3 = $te2->parent->getobj('te3');
-        $te1->text($te2->get);
-        $te3->text($te2->get);
-        $te1->pos($te2->pos);
-    },
-);
+  for(my $i = 0; $i < scalar @$comp; $i++) {
+    my $c = $comp->[$i];
+    my $idx = $i;
+    my $label = sprintf("%2d] [ %-${labelWidth}s ]",$i +1,substr($c->musicTag . " (" . $c->songElement() . ")",0,$labelWidth));
+    my $btns =
+      [
+       {
+	-label => $label,
+	-value => 3,
+	-onpress => sub {
+	  build($COMP_EDIT_SC, 1,$idx);
+	}
+       },
+       {
+	-label => "<u>",
+	-value => 1, 
+	-onpress => sub {
+	  $Composer->moveElementUp($idx);
+	  build($COMP_SC,1);
+	}
+       },
+       {
+	-label => "<d>", 
+	-value => 2,
+	-onpress => sub {
+	  $Composer->moveElementDown($idx);
+	  build($COMP_SC,1);
+	}
+       },
+       {
+	-label => "<x>",
+	-value => 4,
+	-onpress => sub {
+	  $Composer->removeElement($idx);
+	  build($COMP_SC,1);
+	}
+       }
+      ];
+    $C->add
+    (
+     undef, 'Buttonbox',
+     -y => $i + 1,
+     -x => 0,
+     -buttons => $btns
+    );
+  }
+}
 
-$w{$COMP_SC}->add(
-    'te3', 'TextViewer',
-    -y => 5, -x => 42, -width => 20, -border => 1,
-    -padbottom => 4,
-    -title => "Read only",
-    -vscrollbar => 1,
-    -hscrollbar => 1,
-);
+# ----------------------------------------------------------------------
+# Primary Arrange Window
+# ----------------------------------------------------------------------
 
-$w{$COMP_SC}->add(
-    undef, 'Label', -y => -3,
-    -text => "Single line entry:",
-    -width => 20,
+sub _buildArrange {
+  my $E = shift;
+  my $segment = shift;
+  my $yc = 1;
+  my $xc = 15;
+  my $new = '-new-';
+  my $elts = [@$SongElements, $new];
+  my $tags = [@$MusicTags, $new];
+  my $trans = [$ATTR_STRAIGHT_TRANSITION, $ATTR_UP_TRANSITION, $ATTR_DOWN_TRANSITION];
+  $E->add(undef, 'Label', -y => $yc, -x => 0, -text => "Music");
+  $E->add
+    (
+     undef, 'Popupmenu',
+     -y          => $yc++,
+     -x          => $xc,
+     -values     => $tags,
+     -labels     => {map {$_ => $_} @$tags},
+     -selected   => indexOf($tags, $compElement->musicTag()),
+     -width      => 15,
+     -onchange   => sub {
+       my $self = shift;
+       my $tag = $self->get();
+       if ($tag eq $new) {
+	 $tag = $self->root->question(-question => "New Music Name:",
+				      -title => "Yo, question"
+				     );
+	 if ($tag eq $new) {
+	   alert("CUT IT THE FUCK OUT");
+	 } else {
+	   build($ARNG_SC,1,newSegment($tag));
+	 }
+       } else {
+	 $comp->musicTag($tag);
+       }
+     }
+    );
 
-);
-$w{$COMP_SC}->add(
-    undef, 'TextEntry',
-    -sbborder => 1,
-    -y => -3,
-    -x => 21,
-    -width => 20,
-);
+  $E->add(undef, 'Label', -y => $yc, -x => 0, -text => "Song Part");
+  $E->add
+    (
+     undef, 'Popupmenu',
+     -y          => $yc++,
+     -x          => $xc,
+     -values     => $elts,
+     -labels     => {map {$_ => $_} @$elts};
+     -selected   => indexOf($elts, $compElement->musicTag()),
+     -width      => 15,
+     -onchange   => sub {
+       my $self = shift;
+       my $se = $self->get();
+       if ($se eq $new) {
+	 $se = $self->root->question(-question => "New Song Part Name:",
+				     -title => "Yo, question"
+				    );
+	 if ($se eq $new) {
+	   alert("DON'T DO THAT");
+	   undef $se;
+	 }
+       }
+       if ($se) {
+	 $compElement->musicTag($se);
+	 build($COMP_EDIT_SC,1,$compElement);
+       }
+     });
 
-$w{$COMP_SC}->add(
-    undef, 'Label', -y => -1,
-    -text => "Password entry:",
-    -width => 20,
+  $E->add(undef, 'Label', -y => $yc, -text => "Transition Out");
+  $E->add
+    (
+     undef, 'Popupmenu',
+     -y          => $yc++,
+     -x          => length($attr) + 1,
+     -values     => $trans,
+     -labels     => {map {$_ => $_} @$trans},
+     -selected   => indexOf($trans, $compElement->transition),
+     -width      => 30
+     -onchange   => sub {
+       my $self = shift;
+       $compElement->transition($self->get());
+     }
+    );
+  
+  $E->add
+    (
+     undef, 'Buttonbox',
+     -y => $yc++,
+     -buttons =>
+     [
+      {
+       -label => "< Done >",
+       -value => 1, 
+       -onpress => sub {
+	 build($COMP_SC, 1);
+       }
+      }
+     ]
+    );
+}
 
-);
-$w{$COMP_SC}->add(
-    undef, 'PasswordEntry',
-    -sbborder => 1,
-    -y => -1,
-    -x => 21,
-    -width => 20,
-);
+sub _buildEditSongComponent {
+  my $E = shift;
+  my $compElement = shift;
+  my $yc = 1;
+  my $xc = 15;
+  my $new = '-new-';
+  my $elts = [@$SongElements, $new];
+  my $tags = [@$MusicTags, $new];
+  my $trans = [$ATTR_STRAIGHT_TRANSITION, $ATTR_UP_TRANSITION, $ATTR_DOWN_TRANSITION];
+  $E->add(undef, 'Label', -y => $yc, -x => 0, -text => "Music");
+  $E->add
+    (
+     undef, 'Popupmenu',
+     -y          => $yc++,
+     -x          => $xc,
+     -values     => $tags,
+     -labels     => {map {$_ => $_} @$tags},
+     -selected   => indexOf($tags, $compElement->musicTag()),
+     -width      => 15,
+     -onchange   => sub {
+       my $self = shift;
+       my $tag = $self->get();
+       if ($tag eq $new) {
+	 $tag = $self->root->question(-question => "New Music Name:",
+				      -title => "Yo, question"
+				     );
+	 if ($tag eq $new) {
+	   alert("CUT IT THE FUCK OUT");
+	 } else {
+	   build($ARNG_SC,1,newSegment($tag));
+	 }
+       } else {
+	 $comp->musicTag($tag);
+       }
+     }
+    );
 
+  $E->add(undef, 'Label', -y => $yc, -x => 0, -text => "Song Part");
+  $E->add
+    (
+     undef, 'Popupmenu',
+     -y          => $yc++,
+     -x          => $xc,
+     -values     => $elts,
+     -labels     => {map {$_ => $_} @$elts};
+     -selected   => indexOf($elts, $compElement->musicTag()),
+     -width      => 15,
+     -onchange   => sub {
+       my $self = shift;
+       my $se = $self->get();
+       if ($se eq $new) {
+	 $se = $self->root->question(-question => "New Song Part Name:",
+				     -title => "Yo, question"
+				    );
+	 if ($se eq $new) {
+	   alert("DON'T DO THAT");
+	   undef $se;
+	 }
+       }
+       if ($se) {
+	 $compElement->musicTag($se);
+	 build($COMP_EDIT_SC,1,$compElement);
+       }
+     });
+
+  $E->add(undef, 'Label', -y => $yc, -text => "Transition Out");
+  $E->add
+    (
+     undef, 'Popupmenu',
+     -y          => $yc++,
+     -x          => length($attr) + 1,
+     -values     => $trans,
+     -labels     => {map {$_ => $_} @$trans},
+     -selected   => indexOf($trans, $compElement->transition),
+     -width      => 30
+     -onchange   => sub {
+       my $self = shift;
+       $compElement->transition($self->get());
+     }
+    );
+  
+  $E->add
+    (
+     undef, 'Buttonbox',
+     -y => $yc++,
+     -buttons =>
+     [
+      {
+       -label => "< Done >",
+       -value => 1, 
+       -onpress => sub {
+	 build($COMP_SC, 1);
+       }
+      }
+     ]
+    );
+}
 # ----------------------------------------------------------------------
 # File browser
 # ----------------------------------------------------------------------
 
+sub _buildFileBrowser {
+  
 my $values = [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ];
 my $labels = {
     1  => 'One',     2  => 'Two',
@@ -541,6 +967,7 @@ $w{$FILE_SC}->add(
     -text => "Select any option in one of the listboxes please....",
     -width => -1,
 );
+}
 
 # ----------------------------------------------------------------------
 # Popupmenu
@@ -1040,8 +1467,15 @@ $Cui->set_binding( sub{ exit }, "\cQ" );
 # Bind <CTRL+X> to menubar.
 $Cui->set_binding( sub{ shift()->root->focus('main menu') }, "\cX" );
 
+$Cui->set_binding( sub{ select_screen($MAIN_SC) }, "\cG" );
+$Cui->set_binding( sub{ select_screen($INST_SC) }, "\cO" );
+$Cui->set_binding( sub{ select_screen($COMP_SC) }, "\cW" );
 
 $Cui->set_binding( \&goto_prev_demo, "\cP" );
+
+build($MAIN_SC);
+build($INST_SC);
+build($COMP_SC);
 
 $w{$MAIN_SC}->focus;
 

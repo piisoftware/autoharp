@@ -82,7 +82,7 @@ sub play {
   if (!$tag) {
     confess "Drum Loop got a segment without a song element tag. Cannot have that";
   }
-  my $clock = $segment->music->clock();  
+  my $clock = $segment->musicBox->clock();  
   my $loop  = $self->{$ATTR_LOOPS}{$tag};
   if (!$loop) {
     $loop = $self->selectLoop($segment);
@@ -125,7 +125,7 @@ sub play {
     my $pickup = $self->findLeadIn($segment);
     if ($pickup) {
       my $pTrack = $pickup->events();
-      my $pMeas = $pTrack->measures($segment->music->clock);
+      my $pMeas = $pTrack->measures($segment->musicBox->clock);
       if ($pMeas > 1 && unlessPigsFly) {
 	$pTrack->time(0);
 	#cut this down to its last measure. Or 2.
@@ -148,7 +148,7 @@ sub handleTransition {
   my $segment   = shift;
   my $beat      = shift;
 
-  my $clock     = $segment->music->clockAtEnd();
+  my $clock     = $segment->musicBox->clockAtEnd();
   my $bTime     = $clock->beatTime;
   my $bPer      = $clock->beatsPerMeasure();
   
@@ -228,7 +228,7 @@ sub selectLoop {
   
   #get the set of drum loops that match by type and meter
   my $loops = AutoHarp::Model::Loop->loadByTypeAndMeter($DRUM_LOOP,
-							$segment->music->clock->meter);
+							$segment->musicBox->clock->meter);
   #go through the existing loops, if any, and create some weights 
   #based on bucket, song affiliation, and genre
   my $weights;
@@ -264,7 +264,7 @@ sub selectLoop {
     }
     next if (!$genreMatch);
     
-    if ($l->matchesTempo($segment->music->clock->tempo())) {
+    if ($l->matchesTempo($segment->musicBox->clock->tempo())) {
       $score += $TEMPO_WEIGHT;
     }
     foreach my $b (@{$l->getBuckets()}) {
@@ -303,7 +303,7 @@ sub selectLoop {
     return pickOne($loops);
   }
   confess sprintf ("Cannot play in %s meter with genre %s. No drum loops found",
-		   $segment->music->clock->meter,
+		   $segment->musicBox->clock->meter,
 		   ($segmentGenreId) ? $segment->genre->name : 'unset');
 }
 
@@ -325,7 +325,7 @@ sub findLoopBySegmentAndElement {
   }
   foreach my $eLoop (grep {$eMap->{$_->id}} 
 		     @{AutoHarp::Model::Loop->loadByTypeAndMeter
-			 ($DRUM_LOOP, $segment->music->clock->meter)
+			 ($DRUM_LOOP, $segment->musicBox->clock->meter)
 		       }) {
     my $genreMatch = ($hasGenre) ? $eLoop->matchesGenre($segment->genre) : 1;
     if ($genreMatch) {

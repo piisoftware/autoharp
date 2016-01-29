@@ -243,14 +243,14 @@ sub conduct {
     confess "Bad args passed to conduct. Cannot...conduct.";
   }
 
-  my $composition = $args->{$ATTR_COMPOSITION};
+  my $composer    = $args->{$ATTR_COMPOSER};
   my $musicMap    = $args->{$ATTR_MUSIC};
   my $instMap     = $args->{$ATTR_INSTRUMENTS};
   my $hook        = $args->{$ATTR_HOOK};
   my $loops       = $args->{$ATTR_LOOPS};
 
-  if (!$composition) {
-    confess "No composition--cannot conduct";
+  if (!$composer) {
+    confess "No composer--cannot conduct";
   }
 
   if (!$musicMap) {
@@ -265,114 +265,26 @@ sub conduct {
 
   #handle lead/follow roles
   $self->handleFollowing($instMap);
-  print "Building song segments...\n" if ($VERBOSE);  
-  my $builtSegments = $self->buildSongSegments($composition,
-					       $musicMap,
-					       $hook);
+  print "Getting performance segments...\n" if ($VERBOSE);  
+  my $pSegs = $composer->performanceSegments({$ATTR_BARS => $args->{$ATTR_BARS},
+					      $ATTR_HOOK => $args->{$ATTR_HOOK},
+					      %$musicMap});
   print "Conducting segments...\n" if ($VERBOSE);
-  foreach my $segment (@$builtSegments) {
+  foreach my $segment (@$pSegs) {
     my $segmentLoops = ($loops) ? $loops->{$segment->uid} : {};
+    if ($segment->hasHook()) {
+      if ($segment->time != $segment->musicBox->time ||
+	  $segment->time != $segment->hook->time) {
+	confess sprintf("HERE! WTF: %d,%d,%d\n",$segment->time,
+			$segment->musicBox->time,
+			$segment->hook->time);
+      }
+    }
     $self->conductSegment($segment,$instMap, $segmentLoops);
     $song->addSegment($segment);
   }
   return $song;
 }
-
-#take a composition and build it into song segments 
-#with associated plays
-sub buildSongSegments {
-  my $self        = shift;
-  my $composition = shift;
-  my $music       = shift;
-  my $hook        = shift;
-  my $segments = [];
-
-  my $counts = {};
-  my $prevTag;
-  my $prevTrans;
-
-  my $time = 0;
-  for (my $idx = 0; $idx < scalar @$composition; $idx++) {
-    my $compElement = $composition->[$idx];
-    my $nextElement = $composition->[$idx + 1];
-    my $parentMusic = $music->{$compElement->musicTag};
-    if (!$compElement->musicTag()) {
-      confess "Found composition element with empty music tag for " . $compElement->tag();
-    } elsif (!$parentMusic) {
-      confess sprintf("Found composition element with an unrecognized music tag '%s' (have %s)",$compElement->musicTag(),join(", ",keys %$music));
-    }
-    my $segMusic = $parentMusic->clone();
-    my $tag      = $compElement->tag();
-    my $nextTag  = ($nextElement) ? $nextElement->tag() : $SONG_ELEMENT_END;
-    my $isRepeat = ($prevTag && $tag eq $prevTag);
-    $counts->{$tag}++ if (!$isRepeat);
-
-    my $firstSegment = AutoHarp::MusicBox::Song::Segment->new();
-    $firstSegment->time($time);
-    $firstSegment->isRepeat($isRepeat);
-    $firstSegment->elementIndex($counts->{$tag});
-    $firstSegment->songElement($tag);
-    $firstSegment->nextSongElement($nextTag);
-    $firstSegment->isSongBeginning(($prevTag) ? 0 : 1);
-    $firstSegment->transitionIn($prevTrans);
-    $firstSegment->transitionOut($compElement->transition());
-    $firstSegment->music($segMusic);
-    $firstSegment->uid($compElement->firstHalfUID);
-    $firstSegment->hook($hook);
-    if ($compElement->hasFirstHalfPerformers) {
-      #note who's going to play if it's already been decided
-      foreach my $p (@{$compElement->firstHalfPerformers}) {
-	$firstSegment->addPerformerId($p);
-      }
-    }
-
-    push(@$segments, $firstSegment);
-    
-    $time = $firstSegment->reach();
-    if ($segMusic->measures() >= 4 && !($segMusic->measures() % 2)) {
-      #We can split this into two, so let's do it
-      my $secondSegment = AutoHarp::MusicBox::Song::Segment->new();
-      my $secondHalf    = $segMusic->secondHalf();
-      $secondSegment->isRepeat($isRepeat);
-      $secondSegment->elementIndex($counts->{$tag});
-      $secondSegment->songElement($tag);
-      $secondSegment->music($secondHalf);
-      $secondSegment->hook($hook);
-      $secondSegment->nextSongElement($nextTag);
-      $secondSegment->isSecondHalf(1);
-      $secondSegment->transitionOut($compElement->transition());
-      $secondSegment->uid($compElement->secondHalfUID);
-      if ($compElement->hasSecondHalfPerformers) {
-	foreach my $p (@{$compElement->secondHalfPerformers}) {
-	  $secondSegment->addPerformerId($p);
-	}
-      }
-      
-      push(@$segments, $secondSegment);
-      
-      #make the necessary changes to the first segment
-      $segMusic->halve();
-      $firstSegment->music($segMusic);
-      $firstSegment->nextSongElement($tag);
-      $firstSegment->transitionIn($ATTR_STRAIGHT_TRANSITION);
-      $firstSegment->isFirstHalf(1);
-      #set the second segment's time correctly
-      $secondSegment->time($firstSegment->reach());
-      #adjust the hook if it's longer than the first segment
-
-      if ($hook && $hook->duration() > $firstSegment->duration()) {
-	#this hook overlaps the first segment, so give this segment 
-	#the rest of it
-	$secondSegment->hook($hook->subMusic($firstSegment->duration()));
-      }
-      $time = $secondSegment->reach();
-    } 
-    $prevTag   = $tag;
-    $prevTrans = $compElement->transition();
-  }
-  return $segments;
-}
-
 
 sub handlePlay {
   my $self     = shift;
@@ -403,8 +315,8 @@ sub handlePlay {
 	   $inst->name,
 	   $play->duration,
 	   $play->time) if ($VERBOSE);
-    my $mt     = $segment->music->clock->measureTime;
-    my $emt    = $segment->music->clockAtEnd->measureTime;
+    my $mt     = $segment->musicBox->clock->measureTime;
+    my $emt    = $segment->musicBox->clockAtEnd->measureTime;
     my $buffer = ($inst->isDrums()) ? ($mt * 4) : $mt;
     if (
      	$play->time < ($segment->time - $buffer) ||
@@ -413,7 +325,7 @@ sub handlePlay {
       printf "%s is playing this:\n",$inst->id;
       $play->dump;
       printf "for %d to %d\n",$segment->time,$segment->reach;
-      $segment->music->dump();
+      $segment->musicBox->dump();
       confess "That seemed bad, so I died";
     }
     if ((scalar grep {$_->pitch < 12} @{$play->notes()}) > 4) {

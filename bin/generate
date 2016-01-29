@@ -61,13 +61,13 @@ $verse->genre($genre);
 $chorus->genre($genre);
 $bridge->genre($genre);
 
-$composer->addMusic($verse);
-$composer->addMusic($chorus);
-$composer->addMusic($bridge);
+$composer->addMusicTag($verse->tag);
+$composer->addMusicTag($chorus->tag);
+$composer->addMusicTag($bridge->tag);
 print "Composing...\n";
 $composer->compose();
 print "Conducting...\n";
-my $song = $conductor->conduct({$ATTR_COMPOSITION => $composer->composition(),
+my $song = $conductor->conduct({$ATTR_COMPOSER => $composer,
 				$ATTR_MUSIC => {$SONG_ELEMENT_VERSE => $verse, 
 						$SONG_ELEMENT_CHORUS => $chorus, 
 						$SONG_ELEMENT_BRIDGE => $bridge},

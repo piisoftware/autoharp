@@ -18,6 +18,13 @@ my $FLOW_THEME   = 'flowTheme';
 my $CYMBAL_THEME = 'cymbalTheme';
 my $EARWORM_THEME = 'earworm';
 
+my $aVals = {$IDENTITY => [$HARMONIZER,
+			   $SLOW_THEME,
+			   $FAST_THEME,
+			   $FLOW_THEME,
+			   $CYMBAL_THEME,
+			   $EARWORM_THEME]};
+
 my $VELOCITY_MOD = 2/3; #a swag. Oh yes it is
 
 sub reset {
@@ -26,6 +33,16 @@ sub reset {
   delete $self->{$THEME_TAG};
 }
 
+sub attributes {
+  return [$IDENTITY]
+}
+
+sub attributeValues {
+  my $self = shift;
+  my $a = shift;
+  return $aVals->{$a} || [];
+}
+  
 sub toString {
   my $self = shift;
   return $self->SUPER::toString() . ", $IDENTITY: " . $self->themeIdentity();
@@ -117,7 +134,7 @@ sub playDecision {
   } elsif ($self->is($ATTR_MELODY)) {
     #whenever the segment & the music agree 
     #e.g. it's the verse and the music is the verse
-    return ($segment->musicTag() eq $segment->tag());
+    return ($segment->musicTag() eq $segment->songElement());
   }
 
   if ($self->isPlaying()) {
@@ -166,8 +183,8 @@ sub play {
   my $followMusic = shift;
 
   if ($self->is($ATTR_MELODY)) {
-    return ($segment->music()->hasMelody()) ? 
-      $segment->music()->melody()->clone() : undef;
+    return ($segment->musicBox()->hasMelody()) ? 
+      $segment->musicBox()->melody()->clone() : undef;
   } elsif ($self->is($CYMBAL_THEME)) {
     return $self->cymbalPlay($segment,$followMusic);
   } elsif ($self->follow() && $followMusic) {
@@ -176,7 +193,7 @@ sub play {
 	$self->followPlay($segment,$followMusic);
   } 
 
-  if (!$segment->music->hasProgression) {
+  if (!$segment->musicBox->hasProgression) {
     #there is nothing that can be done for you
     return;
   }
@@ -187,7 +204,7 @@ sub play {
     $self->{$THEME_TAG} = $segment->musicTag();
   }
 
-  my $adapted = $self->{$THEME}->adaptOnto($segment->music());
+  my $adapted = $self->{$THEME}->adaptOnto($segment->musicBox());
   $adapted->time($segment->time);
   return $adapted->melody();
 }
@@ -208,13 +225,13 @@ sub harmonyPlay {
     $harmony = $thingToHarmonize->double();
   } elsif (sometimes) {
     #thirds
-    $harmony = $thingToHarmonize->harmonize($segment->music->guide,2);
+    $harmony = $thingToHarmonize->harmonize($segment->musicBox->guide,2);
   } elsif (asOftenAsNot) {
     #fourth under
-    $harmony = $thingToHarmonize->harmonize($segment->music->guide,-3);
+    $harmony = $thingToHarmonize->harmonize($segment->musicBox->guide,-3);
   } else {
     #octave
-    $harmony = $thingToHarmonize->harmonize($segment->music->guide,7);
+    $harmony = $thingToHarmonize->harmonize($segment->musicBox->guide,7);
     $keepAll = 1;
   }
 
@@ -222,13 +239,13 @@ sub harmonyPlay {
   if ($keepAll) {
     #double, octave, or this is the second half? Go for it
     $play->add($harmony);
-  } elsif ($segment->music()->hasPhrases()) {
+  } elsif ($segment->musicBox()->hasPhrases()) {
     #start harmonizing after the first phrase
-    my $startAdd = $segment->time() + $segment->music->phraseDuration();
+    my $startAdd = $segment->time() + $segment->musicBox->phraseDuration();
     $play->add($harmony->subMelody($startAdd,$harmony->reach()));
   } else {
     foreach my $n (@{$harmony->notes()}) {
-      my $clock = $segment->music->clockAt($n->time);
+      my $clock = $segment->musicBox->clockAt($n->time);
       if ($clock->isOnTheBeat($n->time) || sometimes) {
 	$play->add($n);
       }
@@ -243,7 +260,7 @@ sub followPlay {
   my $segment  = shift;
   my $toFollow = shift;
   
-  my $music    = $segment->music();
+  my $music    = $segment->musicBox();
 
   if ($toFollow->isPercussion()) {
     #pick a drum and follow that
@@ -265,7 +282,7 @@ sub followPlay {
 	my $pitch = -1;
 	while ($pitch == -1) {
 	  $pitch = AutoHarp::Generator->new()->
-	    generatePitch({$ATTR_MUSIC => $segment->music(),
+	    generatePitch({$ATTR_MUSIC => $segment->musicBox(),
 			   $ATTR_TIME => $n->time,
 			   $ATTR_PITCH => $prevPitch
 			  });
@@ -324,7 +341,7 @@ sub cymbalPlay {
       $self->{$THEME_TAG} = $segment->musicTag();
     }
     my $theme = $self->{$THEME};
-    my $notes = $theme->adaptOnto($segment->music())->melody();
+    my $notes = $theme->adaptOnto($segment->musicBox())->melody();
     foreach my $c (@{$split->{$cymbal}->notes()}) {
       my $n = pickOne($notes->notesAt($c->time));
       if ($n) {
@@ -351,7 +368,7 @@ sub slowThemeCreate {
 sub fastThemeCreate {
   my $self    = shift;
   my $segment = shift;
-  my $clock   = $segment->music->clock();
+  my $clock   = $segment->musicBox->clock();
   my $isFast  = $clock->tempo > 100;
   my $speed   = ((!$isFast && almostAlways) ||
 		 ($isFast && rarely)) ? 2 : 4;
@@ -367,10 +384,10 @@ sub themeCreate {
   my $self    = shift;
   my $segment = shift;
   my $speed   = shift;
-  my $clock   = $segment->music->clock();
+  my $clock   = $segment->musicBox->clock();
   
   #create a measure of some stuff
-  my $subMusic = $segment->music->subMusic($segment->time,
+  my $subMusic = $segment->musicBox->subMusic($segment->time,
 					   $segment->time + $clock->measureTime);
   #melodize it with even beats or half notes...
   AutoHarp::Generator->new()->melodize($subMusic,{$ATTR_RHYTHM_SPEED => $speed});
@@ -390,7 +407,7 @@ sub themeCreate {
 sub flowThemeCreate {
   my $self    = shift;
   my $segment = shift;
-  my $music   = $segment->music();
+  my $music   = $segment->musicBox();
 
   my $perf = AutoHarp::Events::Melody->new();
   $perf->time($segment->time);
@@ -432,8 +449,8 @@ sub flowThemeCreate {
 sub earwormCreate {
   my $self      = shift;
   my $segment   = shift;
-  my $clock     = $segment->music->clock();
-  my $model     = $segment->music->subMusic($segment->time,
+  my $clock     = $segment->musicBox->clock();
+  my $model     = $segment->musicBox->subMusic($segment->time,
 					    $segment->time + $clock->measureTime);
   my $mel       = AutoHarp::Generator->new()->generateMelody($model);
   #we'll divvy the beats into quarters, and determine a random start and end

@@ -1,11 +1,13 @@
 package AutoHarp::Composer;
 
 use strict;
+use AutoHarp::Composer::CompositionElement;
 use AutoHarp::MusicBox::Base;
-use AutoHarp::Fuzzy;
 use AutoHarp::Generator;
 use AutoHarp::Constants;
+use AutoHarp::Fuzzy;
 use Carp;
+
 
 use base qw(AutoHarp::Class);
 
@@ -17,30 +19,9 @@ my $CHORUS_MAX           = 4;
 my $TARGET_SEGMENT_COUNT = 12;
 my $TRUNCATE             = 'endTheFuckingSong';
 my $COMPOSITION          = 'composition';
-my $MUSIC                = 'music';
-my $DEFAULT_ELT          = 'defaultElement';
+my $DEFAULT_MUSIC_TAG    = 'defaultElement';
 my $C_LOG                = 'compositionLog';
 my $NEXT_TAG_IDX         = 'nextTagWhatever';
-
-my @SONG_ELEMENTS = (
-		     $SONG_ELEMENT_VERSE,
-		     $SONG_ELEMENT_CHORUS,
-		     $SONG_ELEMENT_BRIDGE,
-		     $SONG_ELEMENT_PRECHORUS,
-		     $SONG_ELEMENT_INSTRUMENTAL,
-		     $SONG_ELEMENT_SOLO,
-		     $SONG_ELEMENT_INTRO,
-		     $SONG_ELEMENT_OUTRO,
-		    );
-
-sub CompositionElement {
-  my $args = shift;
-  my $comp = CompElement->new();
-  $comp->tag($args->{$ATTR_TAG});
-  $comp->musicTag($args->{$ATTR_MUSIC});
-  $comp->transition($args->{$SONG_ELEMENT_TRANSITION});
-  return $comp;
-}
 
 sub fromDataStructure {
   my $class = shift;
@@ -48,10 +29,10 @@ sub fromDataStructure {
   my $self  = {$C_LOG => $ds->{$C_LOG}};
   my $comp  = $ds->{$COMPOSITION} || [];
   foreach my $l (@$comp) {
-    my ($tag,$mTag,$trans) = ($l =~ /(.+)\((.+)\), transition: (.+)/);
-    if ($tag && $mTag) {
-      push(@{$self->{$MUSIC}{$tag}},$mTag);
-      push(@{$self->{$COMPOSITION}}, CompElement->new($tag,$mTag,$trans));
+    my ($mTag,$se,$trans) = ($l =~ /(.+)\((.+)\), transition: (.+)/);
+    if ($mTag && $se) {
+      $self->{$ATTR_MUSIC}{$mTag} = 1;
+      push(@{$self->{$COMPOSITION}}, AutoHarp::Composer::CompositionElement->new($mTag, $se, $trans));
     }
   }
   bless $self,$class;
@@ -62,41 +43,41 @@ sub toDataStructure {
   my $self = shift;
   return {$C_LOG => $self->{$C_LOG},
 	  $COMPOSITION => [map {sprintf("%s(%s), transition: %s",
-					$_->tag(),
 					$_->musicTag(),
+					$_->songElement(),
 					$_->transition())}
 			   @{$self->{$COMPOSITION}}]
 	 };
 }
 
-sub addMusic {
-  my $self      = shift;
-  my $music     = shift;
-  if (ref($music)) {
-    my $tag = $music->tag();
-    if (!$tag || !scalar grep {$_ eq $tag} @SONG_ELEMENTS) {
-      #this music isn't tagged, or a tag we know about
-      #tag it as something we recognize, 
-      $tag = $self->nextTag();
-    }
-    push(@{$self->{$MUSIC}{$tag}},$music->tag);
-  }
+sub clearMusicTags {
+  my $self = shift;
+  $self->{$ATTR_MUSIC} = {};
 }
 
-sub nextTag {
+sub addMusicTag {
+  my $self = shift;
+  my $tag  = shift;
+  if (ref($tag)) {
+    $tag = $tag->tag();
+  }
+  $self->{$ATTR_MUSIC}{$tag} = 1;
+}
+
+sub hasMusicTag {
+  my $self = shift;
+  my $e = shift;
+  return exists $self->{$ATTR_MUSIC}{$e}
+}
+
+sub nextSongElement {
   my $self = shift;
   my $idx = $self->{$NEXT_TAG_IDX}++;
-  if ($idx >= scalar @SONG_ELEMENTS) {
+  if ($idx >= scalar @$SONG_ELEMENTS) {
     $idx = 0;
     $self->{$NEXT_TAG_IDX} = 1;
   }
-  return $SONG_ELEMENTS[$idx];
-}
-
-sub hasSongElement {
-  my $self = shift;
-  my $e = shift;
-  return exists $self->{$MUSIC}{$e} && scalar @{$self->{$MUSIC}{$e}};
+  return $SONG_ELEMENTS->[$idx];
 }
 
 #number of times in the song so far we've done a particular part
@@ -106,7 +87,7 @@ sub songElementCount {
   my $element = shift;
   my $count   = 0;
   my $in;
-  foreach my $e (map {$_->tag} @{$self->composition}) {
+  foreach my $e (map {$_->songElement} @{$self->composition}) {
     $count++ if ($e eq $element && $in ne $e);
     $in = $e;
   }
@@ -123,20 +104,20 @@ sub compose {
   if (!$self->hasMusic()) {
     confess "Attempted to compose without first setting any music";
   }
-
+  
   $self->{$COMPOSITION} = [];
   $self->{$C_LOG}       = [];
-  my $prevElement;
+  my $prev;
   while(1) {
-    my $nextElement = $self->decideNextElement($prevElement);
-    my $nextTag     = ($nextElement) ? $nextElement->tag() : $SONG_ELEMENT_END;
-    if ($prevElement) {
-      $prevElement->transition($self->decideTransition($prevElement->tag(),
-						       $nextTag));
+    my $next        = $self->decideNextSongElement($prev);
+    my $nextElement = ($next) ? $next->songElement() : $SONG_ELEMENT_END;
+    if ($prev) {
+      $prev->transition($self->decideTransition($prev->songElement(),
+						$nextElement));
     }
-    if ($nextElement) {
-      push(@{$self->{$COMPOSITION}},$nextElement);
-      $prevElement = $nextElement;
+    if ($next) {
+      $self->addToComposition($next);
+      $prev = $next;
     } else {
       last;
     }
@@ -150,9 +131,99 @@ sub composition {
   return [@{$self->{$COMPOSITION}}];
 }
 
+#fetch performance segments for this composition
+sub performanceSegments {
+  my $self = shift;
+  my $args = shift;
+  my $counts = {};
+  my $time = $args->{$ATTR_TIME} || 0;
+  
+  my $prevElt;
+  foreach my $compElt (@{$self->{$COMPOSITION}}) {
+    my $isRepeat = 0;
+    if ($prevElt) {
+      $prevElt->nextSongElement($compElt->songElement());
+      $compElt->transitionIn($prevElt->transitionOut);
+      $isRepeat = ($compElt->songElement() eq $prevElt->songElement()); 
+    } else {
+      $compElt->isSongBeginning(1);
+    }
+    if (!$compElt->hasMusicBox()) {
+      $compElt->musicBox($args->{$compElt->musicTag()});
+      if (!$compElt->hasMusicBox()) {
+	confess sprintf("Could not find music box for %s, cannot build performance segments",$compElt->musicTag());
+      }
+    }
+    $counts->{$compElt->songElement}++ if (!$isRepeat);
+    $compElt->elementIndex($counts->{$compElt->songElement});
+    $compElt->time($time);
+    $time = $compElt->reach();
+    
+    $prevElt = $compElt;
+  }
+  if ($prevElt) {
+    $prevElt->nextSongElement($SONG_ELEMENT_END);
+  }
+  return [map {@{$_->performanceSegments($args)}} @{$self->{$COMPOSITION}}];
+}
+
 sub hasComposition {
   my $self = shift;
   return scalar @{$self->composition};
+}
+
+sub addToComposition {
+  my $self = shift;
+  my $elt = shift;
+  my $idx = shift;
+  if ($idx != undef && $idx < scalar @{$self->{$COMPOSITION}}) {
+    splice(@{$self->{$COMPOSITION}},$idx,0,$elt);
+    if ($idx > 0) {
+      $elt->transition($self->{$COMPOSITION}->[$idx - 1]->transition);
+    }
+  } else {
+    push(@{$self->{$COMPOSITION}}, $elt);
+  }
+}
+
+
+sub moveElementUp {
+  my $self = shift;
+  my $idx = shift;
+  if ($idx > 0 && $idx < scalar @{$self->{$COMPOSITION}}) {
+    my $one = $self->{$COMPOSITION}[$idx];
+    my $two = $self->{$COMPOSITION}[$idx - 1];
+    my $ot = $one->transition();
+    $one->transition($two->transition);
+    $two->transition($ot);
+    $self->{$COMPOSITION}[$idx] = $two;
+    $self->{$COMPOSITION}[$idx - 1] = $one;
+  }
+}
+
+sub moveElementDown {
+  my $self = shift;
+  my $idx = shift;
+  if ($idx < $#{$self->{$COMPOSITION}}) {
+    my $one = $self->{$COMPOSITION}[$idx];
+    my $two = $self->{$COMPOSITION}[$idx + 1];
+    my $ot = $one->transition();
+    $one->transition($two->transition);
+    $two->transition($ot);
+    $self->{$COMPOSITION}[$idx] = $two;
+    $self->{$COMPOSITION}[$idx + 1] = $one;
+  }
+}
+
+sub removeElement {
+  my $self = shift;
+  my $idx = shift;
+  if ($idx < scalar @{$self->{$COMPOSITION}}) {
+    my $gone = splice(@{$self->{$COMPOSITION}},$idx,1);
+    if ($idx > 0) {
+      $self->{$COMPOSITION}[$idx - 1]->transition($gone->transtion());
+    }
+  }
 }
 
 sub compositionLog {
@@ -165,20 +236,20 @@ sub compositionLog {
   return [@{$self->{$C_LOG}}];
 }
 
-sub decideNextElement {
+sub decideNextSongElement {
   my $self         = shift;
-  my $prevElement  = shift;
-  my $prevTag      = ($prevElement) ? $prevElement->tag() : 
+  my $prevObj      = shift;
+  my $prevElement  = ($prevObj) ? $prevObj->songElement() : 
     $SONG_ELEMENT_BEGIN;
 
-  my $soFar     = $self->songElementCount($prevTag);
+  my $soFar     = $self->songElementCount($prevElement);
   my $didBridge = $self->songElementCount($SONG_ELEMENT_BRIDGE);
   my $didSolo   = $self->songElementCount($SONG_ELEMENT_SOLO);
   my $chorusCt  = $self->songElementCount($SONG_ELEMENT_CHORUS);
-  my $wasChorus = ($prevTag eq $SONG_ELEMENT_CHORUS);
-  my $wasRepeat    = ($prevTag && 
+  my $wasChorus = ($prevElement eq $SONG_ELEMENT_CHORUS);
+  my $wasRepeat    = ($prevElement && 
 		      scalar @{$self->{$COMPOSITION}} > 1 &&
-		      $self->{$COMPOSITION}->[-2]->tag eq $prevTag);
+		      $self->{$COMPOSITION}->[-2]->songElement eq $prevElement);
 
   #truncate now?
   if (!$self->{$TRUNCATE} && 
@@ -186,102 +257,102 @@ sub decideNextElement {
     $self->{$TRUNCATE} = asOftenAsNot;
   }
 
-  my $nextTag;
+  my $nextElement;
   my $decisionStr;
 
  LOOKAHEADBLOCK:
   {
-    if ($prevTag eq $SONG_ELEMENT_BEGIN) {
+    if ($prevElement eq $SONG_ELEMENT_BEGIN) {
       if (almostAlways) {
-	$nextTag = $SONG_ELEMENT_INTRO;
+	$nextElement = $SONG_ELEMENT_INTRO;
 	$decisionStr = "begin to intro";
 	last LOOKAHEADBLOCK;
       }
     }
     
-    if ($prevTag eq $SONG_ELEMENT_PRECHORUS) {
+    if ($prevElement eq $SONG_ELEMENT_PRECHORUS) {
       #well, that's an easy one
       if (unlessPigsFly) {
-	$nextTag = $SONG_ELEMENT_CHORUS;
+	$nextElement = $SONG_ELEMENT_CHORUS;
 	$decisionStr = "Prechorus to chorus ";
 	last LOOKAHEADBLOCK;
       }
     }
     
-    if ($prevTag eq $SONG_ELEMENT_INTRO) {
+    if ($prevElement eq $SONG_ELEMENT_INTRO) {
       #sometimes continue the intro
       if (sometimes) {
-	$nextTag = $SONG_ELEMENT_INTRO;
+	$nextElement = $SONG_ELEMENT_INTRO;
 	$decisionStr = "Continue intro";
 	last LOOKAHEADBLOCK;
       } elsif (almostAlways) {
 	#otherwise almost always go to the verse
-	$nextTag = $SONG_ELEMENT_VERSE;
+	$nextElement = $SONG_ELEMENT_VERSE;
 	$decisionStr = "Go from intro to verse";
 	last LOOKAHEADBLOCK;
       }
     }
       
     #from the outro we can only end or do the outro again
-    if ($prevTag eq $SONG_ELEMENT_OUTRO) {
+    if ($prevElement eq $SONG_ELEMENT_OUTRO) {
       if (($wasRepeat && almostAlways) || (!$wasRepeat && mostOfTheTime)) {
-	$nextTag = $SONG_ELEMENT_END;
+	$nextElement = $SONG_ELEMENT_END;
 	$decisionStr = "outro to end";
 	last LOOKAHEADBLOCK;
       }
       $decisionStr = "repeat outro";
-      $nextTag = $SONG_ELEMENT_OUTRO;
+      $nextElement = $SONG_ELEMENT_OUTRO;
       last LOOKAHEADBLOCK;
     }
 	
     if ($self->{$TRUNCATE}) {
       #cut off the song. 
       if (!$wasChorus && $chorusCt < $CHORUS_MAX) {
-	if ($self->hasSongElement($SONG_ELEMENT_PRECHORUS) && 
-	    ($prevTag ne $SONG_ELEMENT_PRECHORUS || rarely)) {
+	if ($self->hasMusicTag($SONG_ELEMENT_PRECHORUS) && 
+	    ($prevElement ne $SONG_ELEMENT_PRECHORUS || rarely)) {
 	  $decisionStr = "Truncation triggered, going to last chorus, starting at prechorus";
-	  $nextTag = $SONG_ELEMENT_PRECHORUS;
+	  $nextElement = $SONG_ELEMENT_PRECHORUS;
 	} else {
-	  $nextTag = $SONG_ELEMENT_CHORUS;
+	  $nextElement = $SONG_ELEMENT_CHORUS;
 	  $decisionStr = "Truncation triggered, going to last chorus";
 	}
       } elsif ((!$wasChorus && mostOfTheTime) || ($wasChorus && sometimes)) {
-	$nextTag = $SONG_ELEMENT_CHORUS;
+	$nextElement = $SONG_ELEMENT_CHORUS;
 	$decisionStr = "Truncation triggered, song staying alive by repeating last chorus";
       } elsif (rarely) {
-	$nextTag = $SONG_ELEMENT_OUTRO;
+	$nextElement = $SONG_ELEMENT_OUTRO;
 	$decisionStr = "Truncation-based outro";
       } else {
-	$nextTag = $SONG_ELEMENT_END;
+	$nextElement = $SONG_ELEMENT_END;
 	$decisionStr = "Truncation-based end";
       }
       last LOOKAHEADBLOCK;
     }
 
     #coming out of the verse
-    if ($prevTag eq $SONG_ELEMENT_VERSE) {
+    if ($prevElement eq $SONG_ELEMENT_VERSE) {
       if ($soFar == 1) {
 	#as often as not, repeat the first verse
 	if (!$wasRepeat && asOftenAsNot) {
-	  $nextTag = $SONG_ELEMENT_VERSE;
+	  $nextElement = $SONG_ELEMENT_VERSE;
 	  $decisionStr = "second verse immediately after first";
 	  last LOOKAHEADBLOCK;
 	}
       } 
       if ($soFar > 1 && !$didBridge && rarely) {
 	#possibly go to the bridge here
-	$nextTag = $SONG_ELEMENT_BRIDGE;
+	$nextElement = $SONG_ELEMENT_BRIDGE;
 	$decisionStr = "Bridge after second verse";
 	last LOOKAHEADBLOCK;
       } 
       if (almostAlways) {
 	#otherwise, almost always go into the prechorus or chorus
-	if ($self->hasSongElement($SONG_ELEMENT_PRECHORUS)) {
+	if ($self->hasMusicTag($SONG_ELEMENT_PRECHORUS)) {
 	  $decisionStr = "Prechorus after verse";
-	  $nextTag = $SONG_ELEMENT_PRECHORUS;
+	  $nextElement = $SONG_ELEMENT_PRECHORUS;
 	} else {
 	  $decisionStr = "Chorus after verse";
-	  $nextTag = $SONG_ELEMENT_CHORUS;
+	  $nextElement = $SONG_ELEMENT_CHORUS;
 	}
 	last LOOKAHEADBLOCK;
       }
@@ -293,16 +364,16 @@ sub decideNextElement {
       if ($soFar >= $CHORUS_MAX) {
 	if (!$wasRepeat && mostOfTheTime) {
 	  #repeat the last chorus
-	  $nextTag = $SONG_ELEMENT_CHORUS;
+	  $nextElement = $SONG_ELEMENT_CHORUS;
 	  $decisionStr = "Repeat last chorus";
 	  last LOOKAHEADBLOCK;
 	} 
 	if (mostOfTheTime) {
-	  $nextTag = $SONG_ELEMENT_END;
+	  $nextElement = $SONG_ELEMENT_END;
 	  $decisionStr = "End song after last chorus";
 	} else {
 	  $decisionStr = "Outro after last chorus";
-	  $nextTag = $SONG_ELEMENT_OUTRO;
+	  $nextElement = $SONG_ELEMENT_OUTRO;
 	}
 	last LOOKAHEADBLOCK;
       }
@@ -310,19 +381,19 @@ sub decideNextElement {
       #first chorus
       if ($soFar == 1) {
 	if (mostOfTheTime) {
-	  $nextTag = $SONG_ELEMENT_INSTRUMENTAL;
+	  $nextElement = $SONG_ELEMENT_INSTRUMENTAL;
 	  $decisionStr = "Instrumental after first chorus";
 	  last LOOKAHEADBLOCK;
 	} 
       } else {
 	#not the first chorus
 	if (!$didBridge && asOftenAsNot) {
-	  $nextTag = $SONG_ELEMENT_BRIDGE;
+	  $nextElement = $SONG_ELEMENT_BRIDGE;
 	  $decisionStr = "Bridge after chorus $soFar";
 	  last LOOKAHEADBLOCK;
 	} 
 	if ((!$didSolo && mostOfTheTime) || ($didSolo && almostNever)) {
-	  $nextTag = $SONG_ELEMENT_SOLO;
+	  $nextElement = $SONG_ELEMENT_SOLO;
 	  $decisionStr = "Solo after chorus $soFar";
 	  last LOOKAHEADBLOCK;
 	}
@@ -330,16 +401,16 @@ sub decideNextElement {
     } #coming out of a chorus
     
     #coming out of the solo
-    if ($prevTag eq $SONG_ELEMENT_SOLO) {
+    if ($prevElement eq $SONG_ELEMENT_SOLO) {
       if ((!$wasRepeat && asOftenAsNot) || ($wasRepeat && rarely)) {
 	#more soloing! 
-	$nextTag = $SONG_ELEMENT_SOLO;
+	$nextElement = $SONG_ELEMENT_SOLO;
 	$decisionStr = "Repeat Solo";
 	last LOOKAHEADBLOCK;
       } 
       if (sometimes) {
 	#go straight into the chorus
-	$nextTag = $SONG_ELEMENT_CHORUS;
+	$nextElement = $SONG_ELEMENT_CHORUS;
 	$decisionStr = "Chorus after solo";
 	last LOOKAHEADBLOCK;
       }
@@ -347,19 +418,19 @@ sub decideNextElement {
       
     #otherwise...
     if (!$didBridge && rarely) {
-      $nextTag = $SONG_ELEMENT_BRIDGE;
+      $nextElement = $SONG_ELEMENT_BRIDGE;
       $decisionStr = "Fallback: Bridge";
       last LOOKAHEADBLOCK;
     } elsif (!$didSolo && rarely) {
-      $nextTag = $SONG_ELEMENT_SOLO;
+      $nextElement = $SONG_ELEMENT_SOLO;
       $decisionStr = "Fallback: Solo";
       last LOOKAHEADBLOCK;
-    } elsif ($prevTag ne $SONG_ELEMENT_VERSE && almostAlways) {
+    } elsif ($prevElement ne $SONG_ELEMENT_VERSE && almostAlways) {
       $decisionStr = "Fallback: Verse";
-      $nextTag = $SONG_ELEMENT_VERSE;
+      $nextElement = $SONG_ELEMENT_VERSE;
       last LOOKAHEADBLOCK;
     } elsif (!$wasChorus && almostAlways) {
-      $nextTag = $SONG_ELEMENT_CHORUS;
+      $nextElement = $SONG_ELEMENT_CHORUS;
       $decisionStr = "Fallback: Chorus";
       last LOOKAHEADBLOCK;
     }
@@ -367,66 +438,45 @@ sub decideNextElement {
   }			
   #END LOOKAHEAD BLOCK
   $self->compositionLog(sprintf("TO %-12s BASIS: %s",
-				$nextTag,
+				$nextElement,
 				$decisionStr));
   
-  if (!$nextTag || $nextTag eq $SONG_ELEMENT_END) {
+  if (!$nextElement || $nextElement eq $SONG_ELEMENT_END) {
     #thy song has ended
     delete $self->{$TRUNCATE};
     return;
   }
-  my $eltIdx = ($nextTag eq $prevTag) ? $soFar : $soFar + 1;
-  my $m = $self->findMusic($nextTag, $eltIdx);
+  my $eltIdx = ($nextElement eq $prevElement) ? $soFar : $soFar + 1;
+  my $mTag = ($self->{$ATTR_MUSIC}{$nextElement}) ? $nextElement : $self->defaultMusicTag();
 
-  return CompElement->new($nextTag,$m);
+  return AutoHarp::Composer::CompositionElement->new($mTag, $nextElement);
 }
 
 
 sub hasMusic {
   my $self = shift;
-  return ($self->{$MUSIC} && scalar keys %{$self->{$MUSIC}});
+  return (exists $self->{$ATTR_MUSIC} && scalar keys %{$self->{$ATTR_MUSIC}});
 }
 
-sub findMusic {
-  my $self    = shift;
-  my $tag     = shift;
-  my $idx     = shift;
-  my $musics  = $self->{$MUSIC}{$tag} || $self->defaultMusics();
-
-  if (!$musics || !scalar @$musics) {
-    confess "No music to choose from for $tag. Cannot compose!";
-  }
-
-  if (scalar @$musics > 1 && 
-      scalar @$musics <= $idx) {
-    #we have multiple of whatever this is.
-    #and we're asking for the nth of that, so return that instead
-    return $musics->[$idx - 1];
-  }
-  return $musics->[0];
-}
-
-sub defaultMusics {
+sub defaultMusicTag() {
   my $self = shift;
-  my $musics = [];
-  if ($self->hasMusic) {
-    if (!$self->{$DEFAULT_ELT}) {
-      foreach my $elt (@SONG_ELEMENTS) {
-	if ($self->{$MUSIC}{$elt}) {
+  if (!$self->{$DEFAULT_MUSIC_TAG}) {
+    if ($self->hasMusic) {
+      my $lastDitch;
+      foreach my $elt (@$SONG_ELEMENTS) {
+	if ($self->{$ATTR_MUSIC}{$elt}) {
 	  #take the first one we get. 
 	  #Occassionally, we might change our mind
-	  $self->{$DEFAULT_ELT} = $elt;
+	  $lastDitch = $self->{$DEFAULT_MUSIC_TAG} = $elt;
 	  last if (mostOfTheTime);
 	}
       }
-      if (!$self->{$DEFAULT_ELT}) { 
-	print Dumper [keys %{$self->{$MUSIC}}];
-	confess "Couldn't find a default music!";
-      }
-    }
-    $musics = $self->{$MUSIC}{$self->{$DEFAULT_ELT}};
-  }
-  return $musics;
+      $self->{$DEFAULT_MUSIC_TAG} ||= $lastDitch;
+    } else {
+      confess "You haven't set any music yet";
+    } 
+  }    
+  return $self->{$DEFAULT_MUSIC_TAG};
 }
 
 sub decideTransition {
@@ -461,56 +511,4 @@ sub decideTransition {
 }
 
 "I'm definitely shaking";
-
-package CompElement;
-
-use base qw(AutoHarp::Class);
-use AutoHarp::Constants;
-
-sub new {
-  my $class = shift;
-  my $self = {};
-  $self->{tag}      = shift;
-  $self->{musicTag} = shift;
-  $self->{trans}    = shift;
-  bless $self,$class;
-}
-
-sub musicTag {
-  return $_[0]->scalarAccessor('musicTag',$_[1]);
-}
-
-sub tag {
-  return $_[0]->scalarAccessor('tag',$_[1]);
-}
-
-sub transition {
-  return $_[0]->scalarAccessor('trans',$_[1],$ATTR_STRAIGHT_TRANSITION);
-}
-
-sub hasFirstHalfPerformers {
-  return ($_[0]->{fhp} && scalar @{$_[0]->{fhp}});
-}
-
-sub hasSecondHalfPerformers {
-  return ($_[0]->{shp} && scalar @{$_[0]->{shp}});
-}
-
-sub firstHalfPerformers {
-  return $_[0]->scalarAccessor('fhp',$_[1]);
-}
-
-sub secondHalfPerformers {
-  return $_[0]->scalarAccessor('shp',$_[1]);
-}
-
-sub firstHalfUID {
-  return $_[0]->scalarAccessor('fuid',$_[1]);
-}
-
-sub secondHalfUID {
-  return $_[0]->scalarAccessor('suid',$_[1]);
-}
-
-"That stoner should know better...";
 

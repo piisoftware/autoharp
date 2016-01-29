@@ -39,10 +39,10 @@ sub play {
 
   $self->{$OCTAVE} ||= 4; #3 sounded like ass pickOne(3,4);
   
-  if ($segment->music->hasProgression()) {
+  if ($segment->musicBox->hasProgression()) {
     my $padding = AutoHarp::Events::Performance->new();
     $padding->time($segment->time());
-    foreach my $c (@{$segment->music->progression->chords()}) {
+    foreach my $c (@{$segment->musicBox->progression->chords()}) {
       #for now we want pads to be subtle, so we'll keep them in soft velocities
       #that may, like, change, later.  
       my $padC = $c->clone();

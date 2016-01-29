@@ -81,14 +81,14 @@ sub play {
   my $self    = shift;
   my $segment = shift;
   my $follow  = shift;
-  my $music   = $segment->music();
+  my $music   = $segment->musicBox();
 
   if (!$music->hasProgression()) {
     #I have nothing I can do for you
     return;
   }
 
-  my $loop = $self->{$RHYTHM_PATTERN}{$music->tag()} 
+  my $loop = $self->{$RHYTHM_PATTERN}{$music->tag()}
     ||= $self->buildLoop($segment,$follow);
 
   my $perf = $loop->clone();
@@ -131,8 +131,8 @@ sub buildLoop {
   my $self             = shift;
   my $segment          = shift;
   my $guidePerformance = shift;
-  my $music            = $segment->music();
-  my $progression      = $segment->music->progression;
+  my $music            = $segment->musicBox();
+  my $progression      = $segment->musicBox->progression;
   my $genreName        = ($segment->genre()) ? 
     $segment->genre()->name : 'Ex Machina';
   
@@ -272,7 +272,7 @@ sub buildLoop {
 	#make it something interesting
 	$notes = [pickOne(@$notes)];
 	my $pitch = AutoHarp::Generator->new()->
-	  generatePitch({$ATTR_MUSIC => $segment->music(),
+	  generatePitch({$ATTR_MUSIC => $segment->musicBox(),
 			 $ATTR_PITCH => $lastPitch,
 			 $ATTR_TIME => $time});
 	if ($pitch > -1) {
@@ -302,7 +302,7 @@ sub buildRhythmGuide {
 
   my $rhythmGuide = AutoHarp::Events::DrumTrack->new();
   $rhythmGuide->time($segment->time);
-  my $clock = $segment->music->clock();
+  my $clock = $segment->musicBox->clock();
   my @drums;
   my $hits = ($follow) ? $follow->split() : {};
   if ($follow && $follow->time == $segment->time) {
@@ -359,7 +359,7 @@ sub buildRhythmGuide {
       }
     } else {
       #just do the chords. Got nothin' else
-      foreach my $c (@{$segment->music->progression->chords()}) {
+      foreach my $c (@{$segment->musicBox->progression->chords()}) {
 	my $n = $c->root();
 	$n->velocity(mediumVelocity() * $VELOCITY_MOD);
 	$rhythmGuide->add($n);

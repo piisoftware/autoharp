@@ -100,6 +100,7 @@ use Readonly;
 	      $NOTE_MINIMUM_TICKS
 	      $PERCUSSION_CHANNEL
 	      $SONG_ELEMENT
+	      $SONG_ELEMENTS
 	      $SONG_ELEMENT_BEGIN
 	      $SONG_ELEMENT_BRIDGE
 	      $SONG_ELEMENT_CHORUS
@@ -241,6 +242,16 @@ Readonly::Scalar $SONG_ELEMENT_TRANSITION     => 'transition';
 Readonly::Scalar $SONG_ELEMENT_VERSE          => 'verse';
 Readonly::Scalar $SONG_SEGMENT                => 'songSegment';
 
+Readonly::Scalar $SONG_ELEMENTS => [
+				    $SONG_ELEMENT_VERSE,
+				    $SONG_ELEMENT_CHORUS,
+				    $SONG_ELEMENT_BRIDGE,
+				    $SONG_ELEMENT_PRECHORUS,
+				    $SONG_ELEMENT_INSTRUMENTAL,
+				    $SONG_ELEMENT_SOLO,
+				    $SONG_ELEMENT_INTRO,
+				    $SONG_ELEMENT_OUTRO,
+				   ];
 
 sub upCase {
   my $arg = shift;

@@ -44,11 +44,11 @@ sub play {
   my $follow  = shift;
   my $solo = AutoHarp::Events::Melody->new();
   $solo->time($segment->time);
-  if ($segment->music->hasProgression()) {
+  if ($segment->musicBox->hasProgression()) {
     #split the prog into chords and melodize each one with a different 
     #rhythm split
     my $speed;
-    my $music = $segment->music;
+    my $music = $segment->musicBox;
     my $gen = AutoHarp::Generator->new();
     foreach my $c (@{$music->progression->chords()}) {
       if (!$speed || sometimes) {

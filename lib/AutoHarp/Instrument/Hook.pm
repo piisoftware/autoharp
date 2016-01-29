@@ -31,14 +31,14 @@ sub playDecision {
     return 1;
   }
 
-  if ($segment->tag eq $SONG_ELEMENT_INTRO) {
+  if ($segment->songElement eq $SONG_ELEMENT_INTRO) {
     return ($segment->isSongBeginning) ? rarely : mostOfTheTime;
-  } elsif ($segment->tag eq $SONG_ELEMENT_CHORUS) {
+  } elsif ($segment->songElement eq $SONG_ELEMENT_CHORUS) {
     return ($segment->isRepeat()) ? asOftenAsNot : 0;
-  } elsif ($segment->tag eq $SONG_ELEMENT_BRIDGE) {
+  } elsif ($segment->songElement eq $SONG_ELEMENT_BRIDGE) {
     return;
-  } elsif ($segment->tag eq $SONG_ELEMENT_OUTRO ||
-	   $segment->tag eq $SONG_ELEMENT_INSTRUMENTAL) {
+  } elsif ($segment->songElement eq $SONG_ELEMENT_OUTRO ||
+	   $segment->songElement eq $SONG_ELEMENT_INSTRUMENTAL) {
     return unlessPigsFly;
   } elsif ($segment->isChange() && $was) {
     #if this is a change and we were, stop
@@ -54,7 +54,7 @@ sub play {
   my $self = shift;
   my $segment = shift;
   if ($segment->hasHook()) {
-    return $segment->hook->adaptOnto($segment->music())->melody();
+    return $segment->hook->adaptOnto($segment->musicBox())->melody();
   }
   #there no be hook here, so I don't play
   return;

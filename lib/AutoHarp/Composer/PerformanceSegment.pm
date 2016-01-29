@@ -1,7 +1,7 @@
-package AutoHarp::MusicBox::Song::Segment;
+package AutoHarp::Composer::PerformanceSegment;
 
 use strict;
-use base qw(AutoHarp::Class);
+use base qw(AutoHarp::Composer::CompositionElement);
 use Carp;
 
 use AutoHarp::MusicBox::Base;
@@ -14,6 +14,12 @@ my $PLAYED        = 'played';
 my $HALF          = 'half';
 my $FIRST_HALF    = 'firstHalf';
 my $SECOND_HALF   = 'secondHalf';
+
+sub fromParent {
+  my $class = shift;
+  my $parent = shift;
+  return bless $parent->clone(), $class;
+}
 
 sub toDataStructure {
   my $self = shift;
@@ -93,115 +99,6 @@ sub fromDataStructure {
   $self->transitionOut($ds->{$SONG_ELEMENT_TRANSITION});
   return $self;
 }
-  
-sub time {
-  my $self = shift;
-  my $arg  = shift;
-  if (length($arg)) {
-    $self->musicBox->time($arg);
-    if ($self->hasHook()) {
-      $self->hook()->time($arg);
-    }
-    if ($self->hasPerformances()) {
-      while (my ($uid, $data) = each %{$self->{$PERFORMANCES}}) {
-	$data->{$PLAYED}->time($arg) if ($data->{$PLAYED});
-      }
-    }
-  }
-  return $self->musicBox->time();
-}
-
-sub duration {
-  my $self = shift;
-  my $arg  = shift;
-  if (length($arg)) {
-    if ($self->musicBox->duration == 0) {
-      #empty music we can just extend
-      $self->musicBox->duration($arg);
-    } else {
-      #otherwise, repeat the music until it's at least as long as the new duration
-      while ($self->musicBox->duration < $arg) {
-	$self->musicBox->repeat();
-      }
-      #and now truncate it down as necessary
-      if ($self->musicBox->duration > $arg) {
-	$self->musicBox->truncate($arg);
-      }
-    }
-  }
-  return $self->musicBox->duration;
-}
-
-sub durationInSeconds {
-  my $self       = shift;
-  return $self->musicBox->durationInSeconds();
-}
-
-sub reach {
-  my $self = shift;
-  my $arg  = shift; 
-  if (length($arg)) {
-    confess "Segment reach cannot be set directly. Why did you ever think it could?";
-  }
-  return $self->time() + $self->duration();
-}
-
-sub musicBox {
-  my $self = shift;
-  my $arg  = shift;
-  if (ref($arg) && $arg->isa('AutoHarp::MusicBox::Base')) {
-    my $m = $arg->clone;
-    if ($self->{$ATTR_MUSIC}) {
-      $m->time($self->{$ATTR_MUSIC}->time);
-    } else {
-      $m->time(0);
-    }
-    $self->{$ATTR_MUSIC} = $m;
-  }
-  if (!$self->{$ATTR_MUSIC}) {
-    $self->{$ATTR_MUSIC} = AutoHarp::MusicBox::Base->new();
-  }
-  return $self->{$ATTR_MUSIC};
-}
-
-sub hasMusic {
-  my $self = shift;
-  return $self->musicBox->hasMusic();
-}
-
-sub clearHook {
-  my $self = shift;
-  delete $self->{$ATTR_HOOK};
-}
-
-sub hook {
-  return $_[0]->objectAccessor($ATTR_HOOK, $_[1]);
-}
-
-sub hasHook {
-  return (ref($_[0]->{$ATTR_HOOK}));
-}
-
-sub measures {
-  my $self = shift;
-  return $self->musicBox->measures();
-}
-
-sub genre {
-  return $_[0]->musicBox->genre();
-}
-
-sub songElement {
-  return $_[0]->tag($_[1]);
-}
-
-sub musicTag {
-  return $_[0]->musicBox->tag();
-}
-
-sub isSongBeginning {
-  return $_[0]->scalarAccessor('beginning',$_[1]);
-}
 
 sub isIntro {
   return (shift)->songElement =~ /$SONG_ELEMENT_INTRO/i;
@@ -256,7 +153,7 @@ sub nextHalfSegmentIsRepeat {
 #we're the start of a new thing (e.g. a chorus after a verse
 sub isChange {
   my $self = shift;
-  return (!$self->isRepeat() && !$self->isSecondHalf());
+  return (!$self->isRepeat() && $self->isFirstHalf());
 }
 
 #for noting what number verse/chorus this is
@@ -374,6 +271,5 @@ sub addPerformance {
   $self->{$PERFORMANCES}{$player->uid} = {$PLAYER => $player,
 					  $PLAYED => $storedPlay};
 }
-
       
 "Just hear me out--I'm not over you yet";

@@ -76,7 +76,7 @@ sub regenerate {
   } else {
     my $composer = AutoHarp::Composer->new();
     while (my ($k,$v) = each %{$self->{$SONG_ELEMENT}}) {
-      $composer->addMusic($v);
+      $composer->addMusicTag($k);
     }
     $composer->compose();
     $song = $conductor->conduct({$ATTR_COMPOSITION => $composer->composition(),
@@ -263,7 +263,7 @@ sub write {
 
   if (!$ENV{AUTOHARP_NO_LOOPS}) {
     foreach my $seg (@{$song->segments}) {
-      my $guide = $seg->music->guide();
+      my $guide = $seg->musicBox->guide();
       my $segGenre = $seg->genre();
       foreach my $ppData (@{$seg->playerPerformances}) {
 	my $inst = $ppData->{$ATTR_INSTRUMENT};

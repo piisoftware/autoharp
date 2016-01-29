@@ -52,12 +52,12 @@ sub play {
   my $bassline = AutoHarp::Events::Melody->new();
   $bassline->time($segment->time);
 
-  if (!$segment->music->hasProgression()) {
+  if (!$segment->musicBox->hasProgression()) {
     #nothing to be done for you here
     return;
   }
 
-  my $prog = $segment->music->progression();
+  my $prog = $segment->musicBox->progression();
   my @kicks;
   if ($fMusic) {
     #get the hits to follow. Ignore hits if they occur 
@@ -75,7 +75,7 @@ sub play {
       #we did get kicks. Add where there are snares on accent beats
       foreach my $snare (grep {$_->time >= $segment->time && 
 				 $_->isSnare()} @{$fMusic->notes()}) {
-	my $clock = $segment->music->clockAt($snare->time);
+	my $clock = $segment->musicBox->clockAt($snare->time);
 	if ($clock->isAccentBeat($snare->time)) {
 	  push(@kicks,$snare);
 	}
@@ -85,7 +85,7 @@ sub play {
   if (scalar @kicks) {
     for (my $i = 0; $i < scalar @kicks; $i++) {
       if ($prog->chordAt($kicks[$i]->time)) {
-	$bassline->add($self->kickNote($segment->music,
+	$bassline->add($self->kickNote($segment->musicBox,
 				       $kicks[$i],
 				       ($i > 0) ? $kicks[$i-1] : undef,
 				       ($i < $#kicks) ? $kicks[$i+1] : undef));
@@ -120,14 +120,14 @@ sub transition {
   my $segment    = shift;
   my $bassline   = shift;
   if ($segment->transitionOutIsUp() && 
-      $segment->music->hasProgression() && 
+      $segment->musicBox->hasProgression() && 
       mostOfTheTime) {
     #clear the space a measure before the transition and put 8ths in there
-    my $clock      = $segment->music()->clockAtEnd();
+    my $clock      = $segment->musicBox()->clockAtEnd();
     my $buildEnd   = $segment->reach();
     my $buildStart = $buildEnd - $clock->measureTime();
     $bassline->truncateToTime($buildStart);
-    my $subProg    = $segment->music->progression->subProgression($buildStart,$buildEnd);
+    my $subProg    = $segment->musicBox->progression->subProgression($buildStart,$buildEnd);
     my $velInc     = 0; 
     foreach my $c (@{$subProg->chords}) {
       my $bass = $self->eighthNoteBass($c,$clock);
@@ -235,7 +235,7 @@ sub freeStyleBass {
   my $self    = shift;
   my $segment = shift;
   my $chord   = shift;
-  my $scale   = $segment->music->scaleAt($chord->time());
+  my $scale   = $segment->musicBox->scaleAt($chord->time());
   my $progId  = $segment->musicTag();
   
   my $pitch  = $self->bassPitch($chord->rootPitch());
@@ -253,7 +253,7 @@ sub freeStyleBass {
       }
     } else {
       my $gen = AutoHarp::Generator->new();
-      my $sm = $segment->music()->subMusic($chord->time,$chord->reach());
+      my $sm = $segment->musicBox()->subMusic($chord->time,$chord->reach());
       eval {
 	$gen->melodize($sm);
       };
