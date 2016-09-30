@@ -2,158 +2,148 @@
 use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
+use Getopt::Long;
+
 use AutoHarp::Generator;
-use AutoHarp::Events::Guide;
 use AutoHarp::Transcription;
 use AutoHarp::Instrument;
+use AutoHarp::MusicBox::Hook;
 use AutoHarp::Constants;
-use AutoHarp::Conductor;
-use AutoHarp::Composer;
 use AutoHarp::Model::Genre;
-use AutoHarp::Clock;
-use AutoHarp::Scale;
 use AutoHarp::Fuzzy;
 use AutoHarp::Config;
 
 use strict;
 
-my $genreName = join(" ",@ARGV);
+my $genreName;
 my $genre;
-my $all = AutoHarp::Model::Genre->all();
+my $regenerate;
+my $useQuickFile;
+my $silent;
+my $listGenresAndExit;
+my $tempo;
+my $meter;
+my $key;
+my $hook;
+my $bars;
+
+my $DEFAULT_BARS = 8;
+
+GetOptions ("--genre:s" => \$genreName,
+	    "--quick"   => \$useQuickFile,
+	    "--silent"       => \$silent,
+	    "--regenerate:s" => \$regenerate,
+	    "--listGenres" => \$listGenresAndExit,
+	    "--tempo:s" => \$tempo,
+	    "--meter:s" => \$meter,
+	    "--hook:s" => \$hook,
+	    "--key:s" => \$key,
+	    "--bars:s" => \$bars
+	   );
+
+
+my $verbose = !$silent;
+$ENV{AUTOHARP_QUIET} = $silent;
+
 if ($genreName) {
   $genre = AutoHarp::Model::Genre->loadByName($genreName);
   if ($genre->isEmpty()) {
-    print "Genre $genreName is unknown. Valid Genres:\n";
-    print join("\n",map {$_->name} @{AutoHarp::Model::Genre->all()});
-    print "\n";
-    exit(0);
+    print "Genre $genreName is unknown.\n";
+    $listGenresAndExit = 1;
   }
+} 
+
+if ($listGenresAndExit) {
+  print "Valid Genres:\n";
+  print join("\n",sort map {$_->name} @{AutoHarp::Model::Genre->all()});
+  print "\n";
+  exit(0);
+}
+
+my $transcription;
+if ($regenerate) {
+  my $file = (-f $regenerate) ? $regenerate :
+    ($useQuickFile) ? AutoHarp::Config::QuickFile($regenerate) :
+    AutoHarp::Config::DataFile($regenerate);
+
+  $transcription = AutoHarp::Transcription->regenerate($file, $genre);
 } else {
-  $genreName = $ATTR_MACHINE_GENRE;
+  if (!$genre) {
+    $genre     = pickOne(AutoHarp::Model::Genre->all());
+    $genreName = $genre->name();
+  }
+  
+  $transcription = AutoHarp::Transcription->new();
+  my $guide = $transcription->constructGuideForGenre($genre);
+
+  if ($bars) {
+    $guide->bars($bars);
+  }
+  if ($key) {
+    $guide->key($key);
+  }
+  if ($tempo) {
+    $guide->tempo($tempo);
+  }
+  if ($meter) {
+    $guide->meter($meter);
+  }
+  if ($hook) {
+    $transcription->hook(AutoHarp::MusicBox::Hook->fromString($hook,$guide))
+  }
+  
+  $transcription->name("$genreName-" . time());
+  $transcription->instruments(AutoHarp::Instrument->band());
+  $transcription->createMusic($guide);
+  
+  print "Composing...\n" if ($verbose);
+  $transcription->compose();
+  print "Conducting...\n" if ($verbose);
+  $transcription->conduct();
 }
 
-my $band  = AutoHarp::Instrument->band();
-my $clock = chooseClock($genre);
-my $scale = chooseScale();
-my $bars  = 8;
-my $guide = AutoHarp::Events::Guide->fromAttributes($ATTR_BARS => $bars,
-						    $ATTR_CLOCK => $clock,
-						    $ATTR_SCALE => $scale);
-my $generator = AutoHarp::Generator->new();
-my $composer  = AutoHarp::Composer->new();
-my $conductor = AutoHarp::Conductor->new();
+if ($verbose) {
+  print "Done.\n";
+  print "Song Settings: ";
+  my $clock;
+  my $scale;
+  if ($transcription->verse) {
+    $clock   = $transcription->verse->guide->clock;
+    $scale   = $transcription->verse->guide->scale;
+    $genre ||= $transcription->verse->genre();
+  }
+  print AutoHarp::Notation::CreateHeader($ATTR_CLOCK => $clock,
+					 $ATTR_GENRE => $genre,
+					 $ATTR_SCALE => $scale
+					);
+  print "\n";
+  printf "MIDI file is %s\n",$transcription->MIDIOut();
+  printf "JSON file is %s\n",$transcription->JSONOut();
+  printf "Quickfile is %s\n",$transcription->QuickOut();
+}
 
-my $music = [];
-print "Generating verse\n";
-my $verse  = $generator->generateMusic($guide);
-print "Generating chorus\n";
-my $chorus = $generator->generateMusic($guide,(asOftenAsNot) ? $verse : undef);
-print "Generating bridge\n";
-my $bridge = $generator->generateMusic($guide,(asOftenAsNot) ? $verse : $chorus);
-print "Generating hook\n";
-my $hook   = $generator->generateHook((asOftenAsNot) ? $verse : $chorus);
 
-$verse->tag($SONG_ELEMENT_VERSE);
-$chorus->tag($SONG_ELEMENT_CHORUS);
-$bridge->tag($SONG_ELEMENT_BRIDGE);
-
-$verse->genre($genre);
-$chorus->genre($genre);
-$bridge->genre($genre);
-
-$composer->addMusicTag($verse->tag);
-$composer->addMusicTag($chorus->tag);
-$composer->addMusicTag($bridge->tag);
-print "Composing...\n";
-$composer->compose();
-print "Conducting...\n";
-my $song = $conductor->conduct({$ATTR_COMPOSER => $composer,
-				$ATTR_MUSIC => {$SONG_ELEMENT_VERSE => $verse, 
-						$SONG_ELEMENT_CHORUS => $chorus, 
-						$SONG_ELEMENT_BRIDGE => $bridge},
-				$ATTR_INSTRUMENTS => $band,
-				$ATTR_HOOK => $hook
-			       });
-my $transcription = AutoHarp::Transcription->new();
-my $sessName      = "$genreName-" . time();
-$transcription->name($sessName);
-$transcription->verse($verse);
-$transcription->chorus($chorus);
-$transcription->bridge($bridge);
-$transcription->song($song);
-$transcription->hook($hook);
-$transcription->instruments($band);
-print "Writing transcription...\n";
+print "Writing transcription...\n" if ($verbose);
 $transcription->write();
-print "Done.\n";
-if (!$ENV{AUTOHARP_QUIET}) {
-  print "export AUTOHARP_QUIET=1 to be less verbose next time\n";
-}
-print "Genre is $genreName\n";
-print "Song Settings: ";
-print AutoHarp::Notation::CreateHeader($ATTR_CLOCK => $clock,
-				       $ATTR_SCALE => $scale);
-print "\n";
-printf "MIDI file is %s\n",$transcription->MIDIOut();
-printf "JSON file is %s\n",$transcription->JSONOut();
 
-if (!AutoHarp::Config::Play($song)) {
-  print "Set env var MIDI_PLAYER to a valid command-line midi player to play midi file\n";
-}
+AutoHarp::Config::Play($transcription->song);
+
 print "Rename this session,\n";
 print "'x' to annhiliate it entirely,\n";
-print "enter to accept '$sessName' ==> "; 
+printf "enter to accept '%s' ==> ",$transcription->name(); 
 chomp(my $sName = <STDIN>);
 if (lc($sName) eq 'x') {
   $transcription->nuke();
-  print "Goodbye $sessName. You have been deemed unworthy\n";
+  printf "%s has been nuked. Its art has been deemed unworthy.\n",$transcription->name();
 } elsif ($sName) {
   $transcription->name($sName);
-  printf "Session MIDI moved to %s\n",$transcription->MIDIOut();
-  printf "Session JSON moved to %s\n",$transcription->JSONOut();
   $transcription->like();
+  if ($verbose) {
+    printf "Session MIDI moved to %s\n",$transcription->MIDIOut();
+    printf "Session JSON moved to %s\n",$transcription->JSONOut();
+    printf "Session Quickfile moved to %s\n",$transcription->QuickOut();
+  }
 }
+
 exit(0);
 
-sub chooseClock {
-  my $genre = shift;
-  if ($genre) {
-    return $genre->suggestClock();
-  }
-  my $loop = pickOne(AutoHarp::Model::Loop->all({type => $DRUM_LOOP}));
-  return AutoHarp::Clock->new($ATTR_METER => $loop->meter,
-			      $ATTR_TEMPO => $loop->tempo);
-}
-
-sub chooseScale {
-  my $seed = int(rand() * 100);
-  my $pct = 100;
-  #key frequency taken from hooktheory.com
-  my @wheel = map {{pct => $_->[0], key => $_->[1]}} ([26, 'C'],
-						      [12, 'G'],
-						      [10, 'E flat'],
-						      [9, 'F'],
-						      [8, 'D'],
-						      [8, 'A'],
-						      [7, 'E'], 
-						      [7, 'D flat'],
-						      [5, 'B flat'],
-						      [4, 'A flat'],
-						      [2, 'B'],
-						      [2, 'F sharp']);
-  my $key;
-  foreach my $w (reverse @wheel) {
-    $pct -= $w->{pct};
-    if ($seed >= $pct) {
-      $key = $w->{key};
-      last;
-    }
-  }
-  $key ||= $wheel[0]->{key};
-  my $scale = AutoHarp::Scale->new($key);
-  if (sometimes) {
-    #go minor
-    $scale->toRelativeMinor();
-  }
-  return $scale;
-}

@@ -1,0 +1,60 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Model::Loop;
+use AutoHarp::Model::Genre;
+use AutoHarp::Constants;
+use AutoHarp::Config;
+use Data::Dumper;
+use JSON;
+
+my $seen = {};
+my $loops = AutoHarp::Model::Loop->all({$ATTR_TEMPO => 120, type => $DRUM_LOOP});
+
+foreach my $loop (@$loops) {
+  printf "%d) %3d: %s\n",$loop->id,$loop->meter,join(", ",map{$_->name} @{$loop->genres});
+  my $oldTempo = $loop->tempo;
+  my $newTempo;
+  my $hasBPM;
+  foreach my $attr (@{$loop->getAttributes()}) {
+    printf "\t %10s: %s\n",$attr->attribute,$attr->value;
+    if ($attr->value =~ /(\d+)\s*bpm/i) {
+      $newTempo = $1;
+      $hasBPM = 1;
+    } elsif (!$newTempo && $attr->value =~ /(\d{2,})/) {
+      $newTempo = $1;
+    }
+  }
+  if ($newTempo == 120) {
+    print "I guess 120 is right, skipping.\n";
+  } elsif ($hasBPM) {
+    if ($newTempo != $oldTempo) {
+      print " Changing tempo to $newTempo\n";
+      $loop->tempo($newTempo);
+      $loop->save();
+    } else {
+      print " 120 was right, skipping.\n";
+      next;
+    }
+  } elsif ($newTempo > 65 && $newTempo < 250) {
+    printf "Enter to accept $newTempo, enter other tempo, s to skip, q to quit ==> ";
+    chomp(my $t = <STDIN>);
+    if ($t eq 's') {
+      print "Skipped.\n";
+      next;
+    } elsif ($t eq 'q') {
+      exit(0);
+    } elsif ($t > 0) {
+      $newTempo = $t;
+    }
+    print " Changed to $newTempo\n";
+    $loop->tempo($newTempo);
+    $loop->save();
+  } else {
+    print "No valid info, skipping.\n";
+  }
+}
+
+    

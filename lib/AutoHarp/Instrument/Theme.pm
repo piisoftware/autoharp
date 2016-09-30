@@ -142,7 +142,7 @@ sub playDecision {
       return;
     } elsif ($segment->isChange()) {
       return ($self->{$THEME_TAG} eq $segment->musicTag()) ? rarely : 0;
-    } 
+    }
     return 1;
   }
   

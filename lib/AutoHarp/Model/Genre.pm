@@ -47,6 +47,11 @@ sub suggestClock {
   my $self = shift;
 
   my $basePattern = pickOne(@{$self->getDrumLoops()});
+
+  if (!$basePattern) {
+    confess $self->name . " doesn't have drum any loops? Why is it a genre?";
+  }
+  
   my $tempo       = ($basePattern) ? $basePattern->tempo : 120;
   #muck with it by 10% or so
   $tempo = $tempo + (plusMinus() * int(rand(.1 * $tempo)));

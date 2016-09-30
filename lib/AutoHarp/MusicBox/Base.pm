@@ -38,14 +38,12 @@ sub fromDataStructure {
     return $class->fromLegacyDataStructure($ds);
   }
 
-  my $self  = {$ATTR_GUIDE => AutoHarp::Events::Guide->fromString($ds->{$ATTR_GUIDE})};
+  my $self         = {$ATTR_GUIDE => AutoHarp::Events::Guide->fromString($ds->{$ATTR_GUIDE})};
   my $progStr      = $ds->{$ATTR_PROGRESSION};
   my $trueMeasures = AutoHarp::Notation::CountMeasures($progStr);
   if ($trueMeasures) {
     $self->{$ATTR_GUIDE}->measures($trueMeasures);
   }
-  $self->{$ATTR_PROGRESSION} = 
-    AutoHarp::Events::Progression->fromString($progStr, $self->{$ATTR_GUIDE});
   if ($ds->{$ATTR_MELODY}) {
     my $ms = (ref($ds->{$ATTR_MELODY}) eq 'ARRAY') ? 
       $ds->{$ATTR_MELODY} : [$ds->{$ATTR_MELODY}];
@@ -56,7 +54,27 @@ sub fromDataStructure {
     }
     $self->{$ATTR_MELODY} = $mel;
   }
-  return bless $self,$class;
+  bless $self,$class;
+  if ($progStr) {
+    $self->progression(AutoHarp::Events::Progression->fromString($progStr, $self->{$ATTR_GUIDE}));
+  }
+  return $self;
+}
+
+sub fromProgression {
+  my $class = shift;
+  my $prog  = shift;
+  my $guide = shift;
+
+  $guide ||= AutoHarp::Events::Guide->new();
+  my $meas = $prog->measures($guide->clock());
+  $guide->measures($meas);
+
+  my $self = {$ATTR_GUIDE => $guide};
+  bless $self, $class;
+  #sets the scales from the progression:
+  $self->progression($prog);
+  return $self;
 }
 
 #use the old, array-based DS for music box bases
@@ -66,14 +84,14 @@ sub fromLegacyDataStructure {
   my $self  = {};
   my $guide = 
     $self->{$ATTR_GUIDE} = 
-      AutoHarp::Events::Guide->fromString(shift(@$ds));
-  my $trueMeasures = 0;
+    AutoHarp::Events::Guide->fromString(shift(@$ds));
+  my $progStr;
+
   if (scalar @$ds) {
-    my $progStr = shift(@$ds);
+    $progStr = shift(@$ds);
     $guide->measures(AutoHarp::Notation::CountMeasures($progStr));
-    $self->{$ATTR_PROGRESSION} = AutoHarp::Events::Progression->fromString($progStr, $guide);
-    $trueMeasures = $self->{$ATTR_PROGRESSION}->measures($guide->clock());
   }
+  
   if (scalar @$ds) {
     my $mel = AutoHarp::Events::Melody->new();
     $mel->time($guide->time);
@@ -82,7 +100,11 @@ sub fromLegacyDataStructure {
     }
     $self->{$ATTR_MELODY} = $mel;
   }
-  return bless $self,$class;
+  bless $self,$class;
+  if ($progStr) {
+    $self->progression(AutoHarp::Events::Progression->fromString($progStr, $guide));
+  }
+  return $self;
 }
 
 sub toDataStructure {
@@ -252,7 +274,6 @@ sub tracks {
   my $channel = 0;
 
   push(@$tracks, $self->guide->track({$ATTR_CHANNEL => $channel++}));
-  push(@$tracks, $self->{$ATTR_GUIDE}->metronomeTrack());
   foreach my $m (@{$self->music()}) {
     my $c;
     if ($m->channel() == $PERCUSSION_CHANNEL) {
@@ -263,6 +284,34 @@ sub tracks {
     push(@$tracks, $m->track({$ATTR_CHANNEL => $c}));
   }
   return $tracks;
+}
+
+sub opus {
+  my $self = shift;
+  
+  my $c = $self->clone();
+  $c->time(0);
+  while ($c->soundingTime() < 0) {
+    $c->time($c->time + $self->clock()->measureTime());
+  }
+  my $tracks = $c->tracks();
+
+  #build a metronome for this
+  my $mGuide = $self->guide()->clone();
+  $mGuide->time(0);
+  $mGuide->bars(1);
+  my $mScore = [];
+  while ($mGuide->time <= $c->reach()) {
+    push(@$mScore, @{$mGuide->metronome});
+    $mGuide->time($mGuide->reach());
+  }
+  push(@$tracks, MIDI::Track->new({ events => MIDI::Score::score_r_to_events_r($mScore) }));
+       
+  return MIDI::Opus->new({
+			  format => 1,
+			  ticks => $TICKS_PER_BEAT,
+			  tracks => $tracks
+			 });
 }
 
 sub truncate {
@@ -299,7 +348,7 @@ sub subMusic {
   my $new   = AutoHarp::MusicBox::Base->new();
   $new->guide($self->guide->subList($from,$to));
   if ($self->hasProgression()) {
-    $new->progression($self->{$ATTR_PROGRESSION}->subMelody($from,$to));
+    $new->progression($self->progression()->subMelody($from,$to));
   }
   $new->melody($self->melody->subMelody($from,$to));
   return $new;
@@ -401,7 +450,7 @@ sub add {
   if (ref($music) && $music->isa('AutoHarp::MusicBox::Base')) {
     my $addee = $music->clone();
     if ($addee->hasProgression && $self->hasProgression()) {
-      $self->{$ATTR_PROGRESSION}->add($addee->progression);
+      $self->progression()->add($addee->progression);
     }
     if ($addee->hasMelody()) {
       if (!$self->hasMelody()) {
@@ -417,6 +466,8 @@ sub add {
     if ($addee->reach() > $self->reach()) {
       $self->guide->setEnd($addee->reach());
     }
+    #reset the scales
+    $self->setScalesFromProgression();
   }
 }
 

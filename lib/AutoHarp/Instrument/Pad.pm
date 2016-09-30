@@ -25,9 +25,8 @@ sub playDecision {
     if ($segment->wasComeDown()) {
       return epicallySeldom;
     } elsif ($segment->isChange()) {
-      return often;
+      return almostNever;
     } 
-    return 1;
   }
   
   return rarely;

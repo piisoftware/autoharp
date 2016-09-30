@@ -8,17 +8,45 @@ use Carp;
 #absent other information, split composition elements into 4 bar chunks.
 #assuming, obviously, that we can
 my $DEFAULT_BAR_SPLIT = 4;
-my $TRANS_IN          = 'transitionIn';
-my $TRANS_OUT         = 'transitionOut';
+my $TRANSITION_IN     = 'transitionIn';
+my $TRANSITION_OUT    = 'transitionOut';
 my $ELEMENT_INDEX     = 'elementIndex';
+my $SEGMENT_UIDS      = 'segmentUids';
 my $NEXT_ELT          = 'nextElt';
 
 sub new {
-  my $class         = shift;
-  my $musicTag      = shift;
-  my $elt           = shift;
-  my $transitionOut = shift;
-  return bless {$ATTR_TAG => $musicTag, $SONG_ELEMENT => $elt, $TRANS_OUT => $transitionOut}, $class;
+  my $class = shift;
+  my $self  = $class->SUPER::new(@_);
+
+  $self->{$TRANSITION_OUT} = $self->{$SONG_ELEMENT_TRANSITION};
+  
+  return bless $self, $class;
+}
+
+#downcast
+sub fromPerformanceSegment {
+  my $class = shift;
+  my $ps    = shift;
+  my $ce   = {%$ps};
+
+  $ce->{$SEGMENT_UIDS} = [$ps->{$ATTR_UID}];
+  bless $ce,$class;
+}
+
+sub toDataStructure {
+  my $self = shift;
+  return {$SONG_ELEMENT   => $self->songElement(),
+	  $ATTR_MUSIC_TAG => $self->musicTag(),
+	  $TRANSITION_OUT => $self->transitionOut(),
+	  $SEGMENT_UIDS => join(",",@{$self->segmentUids()})
+	 };
+}
+
+sub fromDataStructure {
+  my $class = shift;
+  my $self  = shift;
+  $self->{$SEGMENT_UIDS} = [split(",",$self->{$SEGMENT_UIDS})];
+  bless $self,$class;
 }
 
 sub isSongBeginning {
@@ -62,21 +90,40 @@ sub musicTag {
     if ($self->hasMusicBox) {
       $self->musicBox($tag);
     }
-    $self->{$ATTR_TAG} = $tag;
+    $self->{$ATTR_MUSIC_TAG} = $tag;
   }
-  return $self->{$ATTR_TAG};
+  return $self->{$ATTR_MUSIC_TAG};
+}
+
+sub segmentUids {
+  return $_[0]->{$SEGMENT_UIDS} || [];
+}
+
+sub addSegmentUid {
+  my $self = shift;
+  my $uid  = shift;
+  $self->{$SEGMENT_UIDS} ||= [];
+  push(@{$self->{$SEGMENT_UIDS}}, $uid);
+}
+
+sub getNextSegmentUid {
+  my $self = shift;
+  if (ref($self->{$SEGMENT_UIDS})) {
+    return shift(@{$self->{$SEGMENT_UIDS}});
+  }
+  return;
 }
 
 sub songElement {
-  return $_[0]->scalarAccessor($SONG_ELEMENT, $_[1], 'songElement');
+  return $_[0]->scalarAccessor($SONG_ELEMENT, $_[1]);
 }
 
 sub isRepeat {
-  return $_[0]->scalarAccessor($IS_REPEAT, $_[1], 'isRepeat');
+  return $_[0]->scalarAccessor($IS_REPEAT, $_[1]);
 }
 
 sub elementIndex {
-  return $_[0]->scalarAccessor($ELEMENT_INDEX, $_[1], 'elementIndex');
+  return $_[0]->scalarAccessor($ELEMENT_INDEX, $_[1]);
 }
 
 sub measures {
@@ -102,22 +149,12 @@ sub nextSongElement {
   return $self->{$NEXT_ELT};
 }
 
-sub transitionIn {
-  my $self = shift;
-  my $tr   = shift;
-  if ($tr) {
-    $self->{$TRANS_IN} = $tr;
-  }
-  return $self->{$TRANS_IN} || $ATTR_STRAIGHT_TRANSITION;
+sub transitionOut {
+  return $_[0]->scalarAccessor($TRANSITION_OUT,$_[1],$ATTR_STRAIGHT_TRANSITION);
 }
 
-sub transitionOut {
-  my $self = shift;
-  my $tr   = shift;
-  if ($tr) {
-    $self->{$TRANS_OUT} = $tr;
-  }
-  return $self->{$TRANS_OUT} || $ATTR_STRAIGHT_TRANSITION;
+sub transitionIn {
+  return $_[0]->scalarAccessor($TRANSITION_IN,$_[1],$ATTR_STRAIGHT_TRANSITION);
 }
 
 sub transition {
@@ -177,7 +214,6 @@ sub performanceSegments {
   my $boxClone  = $box->clone;
   my $hookClone = ($hook) ? $hook->clone : undef;
   my $time     = $self->time;
-  my $isRepeat = 0;
 
   my $pSegs = [];
   while($boxClone->duration() > 0) {
@@ -195,7 +231,9 @@ sub performanceSegments {
     $nextSegment->nextSongElement($self->songElement());
     $nextSegment->transitionIn($ATTR_STRAIGHT_TRANSITION);
     $nextSegment->transitionOut($ATTR_STRAIGHT_TRANSITION);
-
+    #for looking up loops, if this is a regeneration
+    $nextSegment->uid($self->getNextSegmentUid());
+    
     if ($hookClone) {
       $nextSegment->hook($hookClone);
       

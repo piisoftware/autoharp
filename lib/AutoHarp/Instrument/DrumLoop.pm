@@ -13,16 +13,17 @@ use AutoHarp::Model::Loop;
 
 use Carp;
 use Data::Dumper;
+use Time::HiRes;
 
 use base qw(AutoHarp::Instrument);
 
 #Total swags, based on nothing. TODO: TUNE THIS.
-my $GENRE_WEIGHT            = 5;
-my $TEMPO_WEIGHT            = 10;
-my $BUCKET_WEIGHT           = 3;
-my $SONG_AFFILIATION_WEIGHT = 20;
-my $SONG_ELEMENT_WEIGHT     = 20;
-my $FILL_WEIGHT             = -25;
+my $GENRE_WEIGHT            = 100;
+my $TEMPO_WEIGHT            = 5;
+my $BUCKET_WEIGHT           = 10;
+my $SONG_AFFILIATION_WEIGHT = 300;
+my $SONG_ELEMENT_WEIGHT     = 7;
+my $FILL_WEIGHT             = -120;
 
 sub choosePatch {
   my $self = shift;
@@ -56,18 +57,6 @@ sub playDecision {
     $playNextSegment = almostAlways;
   }
   return $playNextSegment;
-}
-
-sub patterns {
-  my $self = shift;
-  my $ret = [];
-  while (my ($t,$td) = each %{$self->{$ATTR_LOOPS}}) {
-    while (my ($g,$gd) = each %$td) {
-      push(@$ret,{$ATTR_TAG => $t,
-		  $ATTR_FILE => $gd->{$ATTR_FILE}});
-    }
-  }
-  return $ret;
 }
 
 sub play {
@@ -121,6 +110,7 @@ sub play {
   }
     
   if (!$self->isPlaying() && !$beat->hasLeadIn()) {
+    #TODO: this is also ruining everything
     #did I start playing just now? Can I find a pickup?
     my $pickup = $self->findLeadIn($segment);
     if ($pickup) {
@@ -170,7 +160,8 @@ sub handleTransition {
       $save = ['Bass','Hat'];
     }
     $beat->pruneExcept($save,$timeToAlter);
-  } elsif ($segment->transitionOutIsUp()) {
+  } elsif ($segment->transitionOutIsUp() && almostNever) {
+    #TODO not doing this right now cause it sucks
     my $f = $self->findFill($segment);
     if ($f) {
       my $fill      = $f->events();
@@ -227,43 +218,34 @@ sub selectLoop {
   my $segment = shift;
   
   #get the set of drum loops that match by type and meter
-  my $loops = AutoHarp::Model::Loop->loadByTypeAndMeter($DRUM_LOOP,
-							$segment->musicBox->clock->meter);
+  my $loops;
+  my $meter = $segment->musicBox->clock->meter();
+  if ($segment->genre) {
+    $loops = [grep {$_->meter eq $meter} @{$segment->genre->getDrumLoops()}];
+  } else {
+    $loops = AutoHarp::Model::Loop->loadByTypeAndMeter($DRUM_LOOP,
+						       $segment->musicBox->clock->meter);
+  }
   #go through the existing loops, if any, and create some weights 
   #based on bucket, song affiliation, and genre
   my $weights;
+  my $used = {};
   foreach my $l (values %{$self->{$ATTR_LOOPS}}) {
+    $used->{$l->id} = 1;
     foreach my $b (@{$l->getBuckets()}) {
       $weights->{$ATTR_BUCKET}{$b}++;
-    }
-    foreach my $g (@{$l->genres()}) {
-      $weights->{$ATTR_GENRE}{$g->id}++;
     }
     foreach my $s (@{$l->getSongAffiliations}) {
       $weights->{$ATTR_SONG}{$s}++;
     }
   }
-  my $segmentGenreId = ($segment->genre) ? $segment->genre->id : 0;
-
   #TODO: Like, evolve machine learning to do this:
   #loop through the available choices that matched our meter.
   #weigh ones that match what we've got heavier than those that don't. 
   #Weights defined up top
   my @options;
-  my $totalScores;
   foreach my $l (@$loops) {
     my $score;
-
-    #if the segment has a genre, require that we match it
-    my $genreMatch = !$segmentGenreId;
-    foreach my $g (@{$l->genres}) {
-      if ($g->id == $segmentGenreId) {
-	$genreMatch = 1;
-      }
-      $score += $weights->{$ATTR_GENRE}{$g->id} * $GENRE_WEIGHT;
-    }
-    next if (!$genreMatch);
-    
     if ($l->matchesTempo($segment->musicBox->clock->tempo())) {
       $score += $TEMPO_WEIGHT;
     }
@@ -284,19 +266,25 @@ sub selectLoop {
     }
     if ($score > 0) {
       push(@options, [$score,$l]);
-      $totalScores += $score;
     }
   }
+  
   if (scalar @options) {
     #pick randomly based on weights of available options
-    my $r          = rand();
-    my $rangeStart = 0;
-    for (my $i = 0; $i < scalar @options; $i++) {
-      my $w = $options[$i][0] / $totalScores;
-      if ($r >= $rangeStart && $r < ($rangeStart + $w)) {
-	return $options[$i][1];
+    foreach my $o (sort {$b->[0] <=> $a->[0]} @options) {
+      if ((!$used->{$o->[1]->id} && often)) {
+	return $o->[1];
       }
     }
+  }
+  #still here?
+  if (scalar keys %{$self->{$ATTR_LOOPS}} && almostAlways) {
+    #pick one we're already using
+    return pickOne([values %{$self->{$ATTR_LOOPS}}])
+  }
+  if (scalar @options) {
+    #really? REALLY?
+    return $options[0][1];
   }
   if (scalar @$loops) {
     #dangit--nothing weighted matched. Just pick something in the same meter
@@ -304,7 +292,7 @@ sub selectLoop {
   }
   confess sprintf ("Cannot play in %s meter with genre %s. No drum loops found",
 		   $segment->musicBox->clock->meter,
-		   ($segmentGenreId) ? $segment->genre->name : 'unset');
+		   ($segment->genre) ? $segment->genre->name : 'unset');
 }
 
 sub findLoopBySegmentAndElement {

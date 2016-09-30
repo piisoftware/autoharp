@@ -36,6 +36,8 @@ $transcription->write();
 print "Done\n";
 printf "MIDI file is %s\n",$transcription->MIDIOut();
 printf "JSON file is %s\n",$transcription->JSONOut();
+printf "Quickfile is %s\n",$transcription->QuickOut();
+
 if (!AutoHarp::Config::Play($transcription->song)) {
   print "Set env var MIDI_PLAYER to a valid command-line midi player to play midi file\n";
 }
@@ -47,11 +49,12 @@ print "enter to accept '$sName'==> ";
 chomp(my $nName = <STDIN>);
 if (lc($nName) eq 'x') {
   $transcription->nuke();
-  print "$nName is no more. Its art has been deemed unworthy\n";
+  print "$sName is no more. Its art has been deemed unworthy\n";
 } elsif ($nName) {
   $transcription->name($nName);
   printf "Session MIDI moved to %s\n",$transcription->MIDIOut();
   printf "Session JSON moved to %s\n",$transcription->JSONOut();
+  printf "Quickfile moved to %s\n",$transcription->QuickOut();
   $transcription->like();
 }
 exit(0);

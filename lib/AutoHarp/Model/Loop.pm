@@ -17,6 +17,8 @@ use IO::Pipe;
 use MIDI;
 use Carp;
 
+use Time::HiRes;
+
 use base qw(AutoHarp::Model);
 use strict;
 

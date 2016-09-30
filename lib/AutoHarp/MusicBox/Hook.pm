@@ -24,12 +24,29 @@ sub fromDataStructure {
   my $class = shift;
   my $self = $class->SUPER::fromDataStructure(@_);
 
+  $self->unsetProgression();
+  
   #set the measures from the melody, since that's all there is
   my $tMeas = $self->melody()->measures($self->guide->clock);
   $self->guide->measures($tMeas);
   return $self;
 }
 
+sub fromString {
+  my $class  = shift;
+  my $string = shift;
+  my $srcGuide  = shift;
+  my $guide = ($srcGuide) ? $srcGuide->clone() : AutoHarp::Events::Guide->new();
+  
+  my $melody = AutoHarp::Events::Melody->fromString($string,$guide);  
+  my $self  = $class->new();
+  my $meas  = $melody->measures($guide->clock);
+  $guide->measures($meas);
+  $self->guide($guide);
+  $self->melody($melody);
+  return $self;
+}
+  
 #use the old, array-based DS for music box bases
 sub fromLegacyDataStructure {
   my $class = shift;
@@ -48,6 +65,23 @@ sub fromLegacyDataStructure {
     $self->{$ATTR_MELODY} = $mel;
   }
   return bless $self,$class;
+}
+
+sub progression {
+  my $self = shift;
+  my $prog = shift;
+  if ($prog) {
+    my @c = caller();
+    if ($c[0] !~ /Base/) {
+      confess "WHAT THE ASS?";
+    }
+  }
+  return;
+}
+
+sub toString {
+  my $self = shift;
+  return $self->melody()->toString($self->guide());
 }
 
 sub theHook {

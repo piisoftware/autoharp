@@ -1,0 +1,26 @@
+#!/usr/bin/env perl
+
+use POSIX ":sys_wait_h";
+
+use strict;
+
+
+my $pid = fork();
+my $did = 10;
+if ($pid) {
+  print "I AM THE PARENT. FUCK OFF";
+  while ($did-- > 0) {
+    print waitpid($pid, WNOHANG) . "\n";
+    print "ALSO, FUCK OFF\n";
+    sleep(1);
+  }
+} else {
+  print "I AM THE CHILD\n";
+  sleep(3);
+  print "THE CHILD ENDED\n";
+  exit(0);
+}
+
+print "THE OTHER GODDAMN THING ENDED TOO\n";
+exit(0);
+

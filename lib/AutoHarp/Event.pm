@@ -57,8 +57,12 @@ sub new {
     confess "Argument to $class must be an array";
   } else {
     my $type = $event->[0];
-    if ($type eq $EVENT_TEXT) {
-      return AutoHarp::Event::Text->new($event);
+    if ($type eq $EVENT_TEXT ||
+	$type eq $EVENT_TRACK_NAME ||
+	$type eq $EVENT_INSTRUMENT_NAME) {
+      my $e = AutoHarp::Event::Text->new($event);
+      $e->[0] = $type;
+      return $e;
     } elsif ($type eq $EVENT_MARKER) {
       return AutoHarp::Event::Marker->new($event);
     } elsif ($type eq $EVENT_NOTE) {

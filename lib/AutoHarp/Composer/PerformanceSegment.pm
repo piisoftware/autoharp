@@ -11,9 +11,8 @@ use AutoHarp::Notation;
 my $PLAYER        = 'player';
 my $PERFORMANCES  = 'performances';
 my $PLAYED        = 'played';
-my $HALF          = 'half';
-my $FIRST_HALF    = 'firstHalf';
-my $SECOND_HALF   = 'secondHalf';
+my $SEGMENT_IDX   = 'segmentIdx';
+my $TRANSITION_OUT = 'transitionOut';
 
 sub fromParent {
   my $class = shift;
@@ -21,83 +20,18 @@ sub fromParent {
   return bless $parent->clone(), $class;
 }
 
-sub toDataStructure {
+sub time {
   my $self = shift;
-  if ($self->hasPerformances() && !$self->hasMusic()) {
-    confess "Attempted to serialize music segment with performances but no music!";
-  } 
-  my $ds = {$AH_CLASS => ref($self),
-	    $ATTR_UID => $self->uid(),
-	    $SONG_ELEMENT_TRANSITION => $self->transitionOut(),
-	   };
-  if ($self->hasMusic()) {
-    $ds->{$ATTR_MUSIC} = $self->musicBox->uid;
-  }
-  if ($self->hasPerformances()) {
-    my $guide = $self->musicBox->guide();
-    $ds->{$PERFORMANCES} = 
-      {
-       map {$_ => $self->{$PERFORMANCES}{$_}{$PLAYED}->toDataStructure($guide)}
-       keys %{$self->{$PERFORMANCES}}
-      };
-  }
-  if ($self->isFirstHalf()) {
-    $ds->{$HALF} = $FIRST_HALF;
-  } elsif ($self->isSecondHalf()) {
-    $ds->{$HALF} = $SECOND_HALF;
-  }
-
-  return $ds;
-}
-
-sub fromDataStructure {
-  my $class   = shift;
-  my $ds      = shift;
-  my $session = shift;
-  confess "THIS DOESN'T WORK";
-
-  if (!$session || 
-      !$session->hasSeedMusic() ||
-      !$session->hasInstruments()
-     ) {
-    confess "Session containing music and instruments must be passed to reconstruct a song segment"
-  }
-  my $self = {};
-  my $guide;
-  if ($ds->{$ATTR_MUSIC}) {
-    my $musicMap = {map {$_->uid => $_} @{$session->seedMusic()}};
-    my $music    = $musicMap->{$ds->{$ATTR_MUSIC}};
-    if (!$music) {
-      confess "Couldn't find music $ds->{$ATTR_MUSIC} in session";
-    }
-    if ($ds->{$HALF} eq $FIRST_HALF) {
-      $self->{$ATTR_MUSIC} = $music->clone()->halve();
-      $self->{$FIRST_HALF} = 1;
-    } elsif ($ds->{$HALF} eq $SECOND_HALF) {
-      $self->{$ATTR_MUSIC} = $music->secondHalf();
-      $self->{$SECOND_HALF} = 1;
-    } else {
-      $self->{$ATTR_MUSIC} = $music->clone();
-    }
-    $guide = $self->{$ATTR_MUSIC}->guide();
-  } 
-  if ($ds->{$PERFORMANCES}) {
-    if (!$guide) {
-      confess "Attempted to unserialize music with performances but no music";
-    }
-    while (my ($inst_id, $perf) = each %{$ds->{$PERFORMANCES}}) {
-      my $inst = $session->instrument($inst_id);
-      my $perf = AutoHarp::Class->fromDataStructure($perf);
-      if (!$inst) {
-	confess "Segment contained an instrument not found in the session";
+  my $time = shift;
+  if ($time != undef) {
+    $self->SUPER::time($time);
+    if ($self->hasPerformances()) {
+      while (my ($uid, $data) = each %{$self->{$PERFORMANCES}}) {
+	$data->{$PLAYED}->time($time) if ($data->{$PLAYED});
       }
-      $self->{$PERFORMANCES}{$inst_id} = {$PLAYER => $inst,
-					  $PLAYED => $perf};
     }
   }
-  bless $self,$class;
-  $self->transitionOut($ds->{$SONG_ELEMENT_TRANSITION});
-  return $self;
+  return $self->{$ATTR_TIME} || 0;
 }
 
 sub isIntro {
@@ -142,12 +76,35 @@ sub isRepeat {
   return $self->scalarAccessor('isRepeat',@_);
 }
 
+#a string that describes the above
+sub description {
+  my $self = shift;
+  my $str = ($self->isChange()) ? 'Change ' :
+    ($self->isRepeat()) ? 'Repeat ' : '';
+  if ($self->wasComeDown()) {
+    $str .= 'Come Down';
+  } elsif ($self->wasBuildUp) {
+    $str .= 'Build Up';
+  } else {
+    $str .= 'Straight';
+  }
+  return $str;
+}
+
 #inferred by the fact that the next segment matches this segment
 #and we are a second half.
 sub nextHalfSegmentIsRepeat {
   my $self = shift;
   return ($self->songElement eq $self->nextSongElement() && 
 	  $self->isSecondHalf());
+}
+
+sub addSegmentUid {
+  confess "YOU'VE DONE SOMETHING WRONG";
+}
+
+sub getNextSegmentUid {
+  confess "YOU'VE DONE SOMETHING REALLY WRONG";
 }
 
 #we're the start of a new thing (e.g. a chorus after a verse
@@ -165,7 +122,7 @@ sub elementIndex {
 #if we split a composition element into pieces, what idx is this one?
 sub segmentIndex {
   my $self = shift;
-  return $self->scalarAccessor('segmentIdx',@_);
+  return $self->scalarAccessor($SEGMENT_IDX,@_);
 }
 
 #legacy--for noting if this segment is half of a chorus/verse/whatever
@@ -179,7 +136,7 @@ sub isSecondHalf {
 }
 
 sub transitionOut {
-  return $_[0]->scalarAccessor('transitionOut',$_[1],$ATTR_STRAIGHT_TRANSITION);
+  return $_[0]->scalarAccessor($TRANSITION_OUT,$_[1],$ATTR_STRAIGHT_TRANSITION);
 }
 
 sub transitionIn {
@@ -196,7 +153,7 @@ sub soundingTime {
       }
     }
     return $st;
-  } elsif ($self->hasMusic()) {
+  } elsif ($self->hasMusicBox()) {
     return $self->musicBox()->soundingTime();
   }
   return $self->time;

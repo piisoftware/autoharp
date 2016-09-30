@@ -51,10 +51,10 @@ sub generateMusic {
       $self->generateChordProgression($subCreator);
     }
   }
-
+  
   #based on the new subset, generate some music
   my $newMusic = AutoHarp::MusicBox::Base->new($ATTR_GUIDE => $subGuide);
-
+  
   if ($subCreator->hasProgression() && 
       (!$subCreator->hasMelody() || asOftenAsNot)) {
     $newMusic->progression($subCreator->progression());

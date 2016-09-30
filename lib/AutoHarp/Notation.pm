@@ -31,7 +31,7 @@ my $BASE_LENGTH       = $TICKS_PER_BEAT;
 my $MIN_LENGTH        = $BASE_LENGTH / 4;
  
 sub ParseHeader {
-  my $header = shift;  my $q;
+  my $header = shift;
   my $data = {};
   foreach (split(/,\s*/,$header)) {
     if (/([^:]+):\s*(.+)/) {
@@ -73,15 +73,32 @@ sub SplitMeasures {
   return [grep {/./} split($MBARS_E,$string)];
 }
 
+sub IsHeader {
+  my $data = ParseHeader(shift);
+  return (exists $data->{$ATTR_METER} ||
+	  exists $data->{$ATTR_TEMPO} ||
+	  exists $data->{$ATTR_KEY});
+}
+
+sub IsMelody {
+  my $measures = SplitMeasures(shift);
+  return (scalar @$measures && _string2Time($measures->[0]) > 0);
+}
+
+sub IsProgression {
+  my $measures = SplitMeasures(shift);
+  return (scalar @$measures && ($measures->[0] =~ /$CHORD_E/));
+}
+
 sub String2Melody {
   my $string = shift;
-  my $guide  = _handleGuide(shift);
+  my $guide  = _handleGuideForString($string, shift);
   my $melody = AutoHarp::Events::Melody->new();
   $melody->time($guide->time);
 
   #note now if we have a lead in (e.g. there are notes before the first bar)
   my $hasLeadIn     = ($string !~ /^\|/);
-  my @measures      = grep {/./} split($MBARS_E,$string);
+  my $measures      = SplitMeasures($string);
   my $clock         = $guide->clock();
   my $guideMeasures = $guide->eachMeasure();
   my $generator     = AutoHarp::Generator->new();
@@ -92,15 +109,15 @@ sub String2Melody {
     #but we'll fix it at the end
     unshift(@$guideMeasures, $guide->time - $clock->measureTime);
   }
-  while (scalar @measures > scalar @$guideMeasures) {
+  while (scalar @$measures > scalar @$guideMeasures) {
     my $l = $guideMeasures->[-1];
     push(@$guideMeasures,$l + $guide->clockAtEnd()->measureTime);
   }
   my $lastNote;
   my $inSlur;
   my $mTime;
-  for(my $mIdx = 0; $mIdx < scalar @measures; $mIdx++) {
-    my $measure = $measures[$mIdx];
+  for(my $mIdx = 0; $mIdx < scalar @$measures; $mIdx++) {
+    my $measure = $measures->[$mIdx];
     $mTime      = $guideMeasures->[$mIdx];
     $clock      = $guide->clockAt($mTime);
     my $scale   = $guide->scaleAt($mTime);
@@ -162,6 +179,7 @@ sub String2Melody {
 	#we're slurring. Instead of adding a new note, 
 	#extend the old note and hit the portamento lever
 	my $portaDiff = int((($n->pitch - $lastNote->pitch) / 2) * $WHEEL_ABS_MAX);
+	#print "Diff betwixt notes is $portaDiff\n";
 	my $destination = $inSlur + $portaDiff;
 	if (abs($destination) <= $WHEEL_ABS_MAX) {
 	  #yes! we can accomodate you
@@ -171,12 +189,12 @@ sub String2Melody {
 	  $lastNote->duration($oldDur  + $n->duration);
 	  #printf "\tinstead of adding that note, extending %s at %d from %d to %d\n",$lastNote->toString(),$lastNote->time,$oldDur,$lastNote->duration();
 
-	  #add aftertouch to alleviate the note decay
-	  $melody->add([$EVENT_CHANNEL_AFTERTOUCH,
-			$n->time,
-			0,
-			$n->velocity]);
 	  if ($portaDiff != 0) {
+	    #add aftertouch to alleviate the note decay
+	    $melody->add([$EVENT_CHANNEL_AFTERTOUCH,
+			  $n->time,
+			  0,
+			  $n->velocity]);	    
 	    #do our slur at the last quarter of the note,
 	    #trying to get at least 20 ticks to do stuff
 	    my $span   = ($oldDur > 80) ? $oldDur / 4 :
@@ -237,18 +255,19 @@ sub String2Melody {
       }
     } #end of a measure
     
-    if ($lastNote && $mTime < $nextMeasureStart) {
-      #print "Doing funky fill-up action at $mTime\n";
+    if ($lastNote && $mTime < $nextMeasureStart && $mIdx == 0 && $hasLeadIn) {
       #you didn't give us enough time to fill the measure
       my $cutoff = $nextMeasureStart - $clock->measureTime();
       #I'm going to assume you wanted to nudge this up to the end
       #(e.g. that this is a pickup to the next measure)
       my $delta = $nextMeasureStart - $mTime;
+      #print "Doing funky fill-up action at $mTime: moving everything up $delta to hit $nextMeasureStart\n";
       foreach (@{$melody->events}) {
 	if ($_->time >= $cutoff) {
 	  $_->time($_->time + $delta);
 	}
       }
+
     }
   } 
   return $melody;
@@ -256,13 +275,13 @@ sub String2Melody {
 
 sub String2Progression {
   my $string      = shift;
-  my $guide       = _handleGuide(shift);
+  my $guide       = _handleGuideForString($string, shift);
   my $progression = AutoHarp::Events::Progression->new();
   my $mTime       = $guide->time() || 0;
   $progression->time($mTime);
 
-  my @measures     = grep {/\S/} split(/\s*$MBARS_E\s*/,$string);
-  foreach my $measure (@measures) {
+  my $measures    = SplitMeasures($string);
+  foreach my $measure (@$measures) {
     my $tTime = 0;
     my $clock = $guide->clockAt($mTime);
     my @tokens = grep {/\S/ && (s/\s+//g || 1)} split($CHORD_E,$measure);
@@ -354,11 +373,12 @@ sub String2DrumTrack {
       } 
       $mTime += $resolution;
     }
-    if ($mTime != $nextMeasureStart) {
-      #you gave us not enough/too much to fill the measure
-      my $cutoff = $nextMeasureStart - $clock->measureTime();
+    if ($mTime != $nextMeasureStart && $mIdx == 0 && $hasLeadIn)  {
+      #lead-in that isn't a full measure
       #I'm going to assume you wanted to nudge this up to the end
       #(e.g. that this is a pickup to the next measure)
+
+      my $cutoff = $nextMeasureStart - $clock->measureTime();
       my $delta = $nextMeasureStart - $mTime;
       foreach (@{$drumTrack->events}) {
 	if ($_->time >= $cutoff) {
@@ -376,7 +396,7 @@ sub String2DrumTrack {
 
 sub Melody2String {
   my $melody   = shift;
-  my $guide    = _handleGuide(shift,$melody);
+  my $guide    = _handleGuideForEvents($melody, @_);
 
   my $ms       = $guide->eachMeasure();
   my $notes    = $melody->notes();
@@ -462,7 +482,7 @@ sub Melody2String {
 
 sub DrumTrack2String {
   my $track      = shift;
-  my $guide      = _handleGuide(shift,$track);
+  my $guide      = _handleGuideForEvents($track, @_);
   my $resolution = shift || $DRUM_RESOLUTION;
 
   my $string  = "";
@@ -512,7 +532,7 @@ sub DrumTrack2String {
 
 sub Progression2String {
   my $progression = shift;
-  my $guide       = _handleGuide(shift,$progression);
+  my $guide       = _handleGuideForEvents($progression, @_);
   my $string      = "|";
   my $ms          = $guide->eachMeasure();
   my $reach       = $guide->time();
@@ -749,16 +769,25 @@ sub _calculateStartReach {
   return $melody->time();
 }
 
-sub _handleGuide {
+sub _handleGuideForString {
+  my $string = shift;
   my $guide = shift;
-  my $track = shift;
-  if ($DEBUG && !$guide || !$guide->isa('AutoHarp::Events::Guide')) {
-    confess "Notation called without a music guide.";
+  if (!$guide) {
+    my $bars = CountMeasures($string);
+    return AutoHarp::Events::Guide->fromAttributes($ATTR_BARS => $bars);
+  } elsif (!$guide->isa('AutoHarp::Events::Guide')) {
+    confess "THIS IS THE WRONG THING!";
   }
-  if ($track && $guide->time != $track->time) {
-    confess "Notation called with guide and track that do not have the same zero. Badness will surely ensue!";
+  return $guide;
+}
+
+sub _handleGuideForEvents {
+  my $events = shift;
+  my $guide  = shift;
+  if (!$guide) {
+    confess "I haven't done this yet. Sorry";
   }
-  return $guide || AutoHarp::Events::Guide->new();
+  return $guide;
 }
 
 "You make me feel my soul";

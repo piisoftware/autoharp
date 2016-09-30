@@ -1,0 +1,21 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Config;
+use AutoHarp::ScoreCollection;
+
+my $session = $ARGV[0];
+my $midi = AutoHarp::Config::MidiFile($ARGV[0]);
+
+if (!-f $midi) {
+  die "Can't find a MIDI file named $ARGV[0]";
+}
+
+my $collection = AutoHarp::ScoreCollection->fromFile($midi);
+my $newMidi = $midi;
+$newMidi =~ s/(\.mid)/-sorted$1/;
+$collection->out($newMidi);
+print "Sorted to $newMidi\n";
+exit(0);

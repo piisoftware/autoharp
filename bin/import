@@ -11,7 +11,7 @@ use Data::Dumper;
 use JSON;
 
 my $StartDir = $ARGV[0] || ".";
-my $ForceToDrums = $ARGV[1];
+my $ForceToDrums = !$ARGV[1];
 my $Interactive = 0;
 my $MaxBars = 32;
 

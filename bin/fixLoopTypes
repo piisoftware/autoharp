@@ -1,0 +1,76 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Model::Loop;
+use AutoHarp::Model::Genre;
+use AutoHarp::Constants;
+use AutoHarp::Config;
+use Data::Dumper;
+use JSON;
+
+my $seen = {};
+foreach my $G (@{AutoHarp::Model::Genre->all()}) {
+  if ($G->name eq $ATTR_MACHINE_GENRE) {
+    print "Skipping $ATTR_MACHINE_GENRE...\n";
+    next;
+  }
+  my $loops = $G->getLoops($ATTR_MUSIC);
+  printf "%s: %d loops\n",$G->name(),scalar @$loops;
+  foreach my $loop (@$loops) {
+    if ($seen->{$loop->id}++) {
+      next;
+    }
+    
+    printf "%d) %3d %3s %s\n",$loop->id,$loop->tempo,$loop->meter,$G->name;
+    print "\tAttributes:\n";
+    my $yeahObvi = 0;
+    my $yeahNotObvi = 0;
+    foreach my $attr (@{$loop->getAttributes()}) {
+      printf "\t %10s: %s\n",$attr->attribute,$attr->value;
+      if ($attr->attribute eq $ATTR_BUCKET) {
+	if ($attr->value =~ /drum/i ||
+	    $attr->value =~ /percussion/i ||
+	    $attr->value =~ / Kit/ ||
+	    $attr->value eq 'Abbey Road' ||
+	    $attr->value eq 'Vintage'
+	   )  {
+	  $yeahObvi = 1;
+	}
+	if ($attr->value eq 'Damage Library' ||
+	    $attr->value eq 'Evolve R2 Library')  {
+	  $yeahNotObvi = 1;
+	}
+      }
+    }
+    if ($yeahNotObvi) {
+      print "Autoskipping...\n";
+      next;
+    }
+    
+    $loop->toDrumLoop();
+    if ($yeahObvi) {
+      print "Autoconverting...\n";
+      $loop->save();
+      next;
+    }
+    
+    while(1) {
+      print "(c)onvert,(p)lay,(s)kip ==> (c) ";
+      chomp($a = lc(<STDIN>));
+      if (!$a || $a eq 'c') {
+	$loop->save();
+	print "Converted.\n";
+	last;
+      } elsif ($a eq 'p') {
+	AutoHarp::Config::PlayOpus($loop->toOpus);
+      } elsif ($a eq 'q') {
+	exit(0);
+      } else {
+	print "Skipping.\n";
+	last;
+      }
+    }
+  }
+}

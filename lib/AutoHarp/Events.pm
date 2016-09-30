@@ -4,9 +4,14 @@ use base qw(AutoHarp::Class);
 use AutoHarp::Events::Guide;
 use AutoHarp::Model::Loop;
 use AutoHarp::Constants;
+use List::Util qw(min max);
+
 use strict;
 use Carp;
 use MIDI;
+
+my $VOLUME_FADER      = 7;
+my $PAN_KNOB          = 10;
 
 sub new {
   my $class    = shift;
@@ -65,7 +70,7 @@ sub fromOpus {
       }
       if ($eo->isMusicGuide()) {
 	push(@$guideEvents,$eo);
-      } elsif ($eo->isMusic()) {
+      } else {
 	$endTime = $eo->reach if ($eo->reach > $endTime);
 	push(@$track,$eo);
       }
@@ -159,6 +164,7 @@ sub type {
 sub is {
   my $self = shift;
   my $arg  = shift;
+  confess "I hope you don't use this, because it's broken";
   if ($arg) {
     $arg = "AutoHarp::" . uc(substr($arg,0,1)) . substr($arg,1);
     return $self->isa($arg);
@@ -167,12 +173,33 @@ sub is {
 
 sub name {
   my $self = shift;
-  foreach my $e (@$self) {
-    if ($e->isNameEvent()) {
-      return $e->[2];
-    }
+  my $name = shift;
+  my $type = shift || $EVENT_TRACK_NAME;
+  if ($type ne $EVENT_TRACK_NAME &&
+      $type ne $EVENT_INSTRUMENT_NAME &&
+      $type ne $EVENT_TEXT) {
+    confess "$type is not a valid type of MIDI event";
   }
-  return $self->type();
+  
+  if ($name) {
+    $self->removeType($type);
+    $self->add([$type, $self->time, $name]);
+    return $name;
+  }
+  my $e = $self->findByType($type);
+  return ($e) ? $e->text() : undef;
+}
+
+sub trackName {
+  my $self = shift;
+  my $name = shift;
+  return $self->name($name, $EVENT_TRACK_NAME);
+}
+
+sub instrumentName {
+  my $self = shift;
+  my $name = shift;
+  return $self->name($name, $EVENT_INSTRUMENT_NAME);
 }
 
 #qsorts the object by time and type, in place
@@ -223,6 +250,42 @@ sub subList {
     }
   }
   return $s;
+}
+
+#same as above, but only music, and cuts off where necessary
+sub subMelody {
+  my $self     = shift;
+  my $oStart   = shift;
+  my $oEnd     = shift;
+  my $noFrontSplits = shift;
+
+  my $int     = $oEnd - $oStart;
+  my $start   = (length($oStart)) ? $oStart : $self->time;
+  my $end     = (length($oEnd)) ? $oEnd : $self->reach;
+  my $mel     = ref($self)->new();
+  $mel->time($start);
+  if ($end > $start) {
+    foreach my $n (@$self) {
+      next if (!$n->isMusic());
+      next if ($n->type eq $EVENT_PATCH_CHANGE);
+      next if ($n->reach <= $start);
+      next if ($n->time < $start && $noFrontSplits);
+      last if ($n->time >= $end);
+
+      my $new = $n->clone;
+      if ($new->time < $start) {
+	my $nDur = $new->duration - ($start - $new->time);
+	$new->time($start);
+	$new->duration($nDur);
+      } 
+      if ($new->reach > $end) {
+	my $nDur = $new->duration - ($new->reach - $end);
+	$new->duration($nDur);
+      }
+      $mel->add($new);
+    }
+  }
+  return $mel;
 }
 
 sub truncate {
@@ -361,7 +424,7 @@ sub reach {
 sub measures {
   my $self = shift;
   my $clock = shift;
-  if (!$clock) {
+  if (!$clock || !$clock->isa('AutoHarp::Clock')) {
     confess "Need a clock to count measures of a " . ref($self);
   }
   my $trueDuration = $self->reach() - $self->time();
@@ -606,6 +669,133 @@ sub append {
   }
 }
 
+#####################
+# Music-Specific Bits
+#####################
+
+sub hasChords {  
+  my $self = shift;
+  #more than a third of the notes are closely overlapping
+  my $seenCt = 0;
+  my $overlapPct = .9;
+  my $notes = $self->notes();
+  for(my $i = 0; $i < $#$notes; $i++) {
+    my $n = $notes->[$i];
+    my $m = $notes->[$i + 1];
+    my $olap = min($n->reach,$m->reach) - max($n->time,$m->time);
+    if ($olap / $n->duration > $overlapPct) {
+      $seenCt++;
+    }
+  }
+  return (scalar @$notes) ? ($seenCt / scalar @$notes > 0.33) : 0;
+}
+  
+#return only the notes of a melody
+sub notes {
+  my $self = shift;
+  return [grep {$_->isNotes()} @$self];
+}
+
+sub startNote {
+  my $self = shift;
+  my $first = $self->notes->[0];
+  if ($first) {
+    return $first->toNote();
+  }
+  return;
+}
+
+sub hasNotes {
+  my $self = shift;
+  return scalar grep {$_->isNotes()} @$self;
+}
+
+sub notesAt {
+  my $self = shift;
+  my $time = shift;
+  return [grep {$_->time <= $time && $_->reach > $time} @{$self->notes()}];
+}
+
+#time the music starts, perhaps before time zero 
+#(e.g. if this melody has a lead-in)
+sub soundingTime {
+  my $self = shift;
+  return ($self->hasNotes()) ? $self->startNote()->time : $self->time;
+}
+
+sub hasLeadIn {
+  my $self = shift;
+  return ($self->soundingTime < $self->time);
+}
+
+sub setPatch {
+  my $self = shift;
+  my $patch = shift;
+  if (length($patch)) {
+    my $pEvent = 
+      AutoHarp::Event->new([$EVENT_PATCH_CHANGE,$self->soundingTime,$self->channel,$patch]);
+    $self->removeType($EVENT_PATCH_CHANGE);
+    $self->add($pEvent);
+  }
+}
+
+sub setVolume {
+  my $self = shift;
+  my $pct  = shift;
+  if (length($pct)) {
+    my $volEvent = 
+      AutoHarp::Event->new([$EVENT_CONTROL_CHANGE, 
+			     $self->soundingTime,
+			     $self->channel,
+			     $VOLUME_FADER,
+			     int(($pct / 100) * 127)]);
+    $self->remove($volEvent);
+    $self->add($volEvent);
+  }
+}
+
+sub setPan {
+  my $self    = shift;
+  my $pct     = shift;
+  if (length($pct)) {
+    my $pivot   = 63;
+    my $panEvent = 
+      AutoHarp::Event->new([$EVENT_CONTROL_CHANGE,
+			     $self->soundingTime,
+			     $self->channel,
+			     $PAN_KNOB,
+			     $pivot + int(($pct * $pivot) / 100)]);
+    $self->remove($panEvent);
+    $self->add($panEvent);
+  } 
+}
+
+sub track {
+  my $self    = shift;
+  my $args    = shift;
+  my $obj     = $self->clone();
+  if (ref($args)) {
+    $obj->channel($args->{$ATTR_CHANNEL});
+    $obj->setPatch($args->{$ATTR_PATCH});
+    $obj->setPan($args->{$ATTR_PAN});
+    $obj->setVolume($args->{$ATTR_VOLUME});
+  }
+  return MIDI::Track->new({ 'events' => $obj->export});
+}
+
+
+#gets the idx'th note
+sub getNote {
+  my $self = shift;
+  my $idx  = shift;
+  return (grep {$_->isNote()} @$self)[$idx];
+}
+
+#gets the last note, whatever it is
+sub endNote {
+  return $_[0]->getNote(-1);
+}
+
 sub dump {
   my $self = shift;
   foreach my $n (@$self) {
@@ -613,17 +803,19 @@ sub dump {
   }
 }
 
-#write this as a loop to the database
-sub transcribe {
+sub toLoop {
   my $self  = shift;
   my $guide = shift;
   if (!$guide) {
-    confess "Transcribing to DB requires a guide along with the events";
+    confess "Creating a loop requires a guide along with the events";
   }
+  
   my $cGuide = $guide->clone();
   #whack off any intro (notes before the 0 of this track)
   #Later we might decide to save them. TODO: That?
-  my $cTrack = $self->subList($self->time,$self->reach());
+  #don't store genre in our loops. Do this in tagging
+  $cGuide->clearGenre();
+  my $cTrack = $self->subMelody($self->time,$self->reach());
   my $bars   = $cTrack->measures($guide->clock);
   $cGuide->time(0);
   $cTrack->time(0);
@@ -632,7 +824,7 @@ sub transcribe {
 			      tracks => [$cGuide->track, $cTrack->track]
 			     });
   my $loop = AutoHarp::Model::Loop->fromOpus($op);
-  if ($loop->events()->measures($guide->clock) != $bars) {
+  if (!$loop->events() || $loop->events()->measures($guide->clock) != $bars) {
     print "ORIGINAL:\n";
     $self->dump();
     print "FROM-ZERO TRACK:\n";
@@ -649,6 +841,15 @@ sub transcribe {
   if ($self->isPercussion()) {
     $loop->type($DRUM_LOOP);
   }
+  return $loop;
+}
+
+#write this as a loop to the database
+sub transcribe {
+  my $self  = shift;
+  my $guide = shift;
+  my $loop = $self->toLoop($guide);
+  
   #make sure we don't already have this in the database
   my $exists = AutoHarp::Model::Loop->loadBy({midi => $loop->midi,
 					      type => $loop->type});

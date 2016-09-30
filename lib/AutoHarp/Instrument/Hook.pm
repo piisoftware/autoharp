@@ -24,13 +24,7 @@ sub playDecision {
   my $segment  = shift;
 
   my $was      = $self->isPlaying();
-  my $change   = $segment->isChange();
   
-  #keep playing if we were and we're not changing
-  if ($was && !$change) {
-    return 1;
-  }
-
   if ($segment->songElement eq $SONG_ELEMENT_INTRO) {
     return ($segment->isSongBeginning) ? rarely : mostOfTheTime;
   } elsif ($segment->songElement eq $SONG_ELEMENT_CHORUS) {
@@ -47,6 +41,7 @@ sub playDecision {
     #if we came down and we weren't, why not start?
     return often;
   }
+
   return $was;
 }
 

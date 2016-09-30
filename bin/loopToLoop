@@ -1,0 +1,21 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use strict;
+use AutoHarp::Config;
+use AutoHarp::ScoreCollection;
+use AutoHarp::Model::Loop;
+use AutoHarp::Model::LoopAttribute;
+my $id = $ARGV[0];
+
+foreach my $attr (@{AutoHarp::Model::LoopAttribute->all({attribute => 'AutoHarpSong'})}) {
+  my $id = $attr->loop_id();
+  my $loop = AutoHarp::Model::Loop->load($id);
+  my $eSet = $loop->eventSet();
+  my $new  = $eSet->[1]->toLoop($eSet->[0]);
+  $loop->midi($new->midi);
+  $loop->save();
+  print "DID: $id\n";
+}
+exit(0);

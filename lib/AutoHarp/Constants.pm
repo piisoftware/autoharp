@@ -34,6 +34,7 @@ use Readonly;
 	      $ATTR_METER
 	      $ATTR_MIDI_FILE
 	      $ATTR_MUSIC
+	      $ATTR_MUSIC_TAG
 	      $ATTR_NAME
 	      $ATTR_NOTE
 	      $ATTR_PAN
@@ -50,7 +51,6 @@ use Readonly;
 	      $ATTR_STRAIGHT_TRANSITION
 	      $ATTR_UP_TRANSITION
 	      $ATTR_DOWN_TRANSITION
-	      $ATTR_TAG
 	      $ATTR_TEMPO
 	      $ATTR_TIME
 	      $ATTR_UID
@@ -195,6 +195,7 @@ Readonly::Scalar $ATTR_MELODY              => 'melody';
 Readonly::Scalar $ATTR_METER               => 'meter';
 Readonly::Scalar $ATTR_MIDI_FILE           => 'MIDIFile';
 Readonly::Scalar $ATTR_MUSIC               => 'music';
+Readonly::Scalar $ATTR_MUSIC_TAG           => 'musicTag';
 Readonly::Scalar $ATTR_NAME                => 'name';
 Readonly::Scalar $ATTR_NOTE                => 'note';
 Readonly::Scalar $PAD_INSTRUMENT           => 'pad';
@@ -213,7 +214,6 @@ Readonly::Scalar $ATTR_START_TIME          => 'startTime';
 Readonly::Scalar $ATTR_STRAIGHT_TRANSITION => 'straight';
 Readonly::Scalar $ATTR_UP_TRANSITION       => 'up';
 Readonly::Scalar $ATTR_DOWN_TRANSITION     => 'down';
-Readonly::Scalar $ATTR_TAG                 => 'tag';
 Readonly::Scalar $ATTR_TEMPO               => 'tempo';
 Readonly::Scalar $ATTR_TIME                => 'time';
 Readonly::Scalar $ATTR_UID                 => 'uid';

@@ -1,4 +1,12 @@
 #!/usr/bin/env perl
-use MIDI;
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
 
-MIDI::Opus->new({'from_file' => $ARGV[0]})->dump({dump_tracks => 1});
+use AutoHarp::Config;
+use MIDI;
+my $f = $ARGV[0];
+if (!-f $f) {
+  $f = AutoHarp::Config::MidiFile($f);
+}
+
+MIDI::Opus->new({'from_file' => $f})->dump({dump_tracks => 1});

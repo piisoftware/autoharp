@@ -94,39 +94,60 @@ sub new {
   return $self;
 }
 
-sub fromTrack {
-  my $class = shift;
-  my $track = shift;
-  my $self   = {};
-  my $channel;
-  if (ref($track)) {    
-    my $score = MIDI::Score::events_r_to_score_r($track->events_r);
-    foreach my $e (@$score) {
-      if ($e->[0] eq $EVENT_PATCH_CHANGE) {
-	$self->{$ATTR_PATCH} = $e->[3];
-	$channel = $e->[2];
-	last;
-      } 
+sub fromEvents {
+  my $class  = shift;
+  my $events = shift;
+  my $guide  = shift;
+  
+  if ($events->isPercussion()) {
+    return $class->new($ATTR_INSTRUMENT_CLASS => $DRUM_LOOP);
+  }
+  my $iStr          = $events->instrumentName();
+  my $patchEvent    = $events->findByType($EVENT_PATCH_CHANGE);
+  my $patch         = ($patchEvent) ? $patchEvent->value() : undef;
+  if (__isValidInstrumentString($iStr)) {
+    return $class->fromString($iStr);
+  } elsif ($iStr =~ /bass/i) {
+    return $class->new($ATTR_INSTRUMENT_CLASS => $BASS_INSTRUMENT,
+		       $ATTR_INSTRUMENT => $iStr,
+		       $ATTR_PATCH => $patch
+		      );
+  } elsif ($iStr =~ /pad/i) {
+    return $class->new($ATTR_INSTRUMENT_CLASS => $PAD_INSTRUMENT,
+		       $ATTR_INSTRUMENT => $iStr,
+		       $ATTR_PATCH => $patch
+		      );
+  }
+  if ($guide) {
+    #if we're still here, let's try to find a 4-bar loop that matches this in the db.
+    my $st = $events->soundingTime();
+    my $clock = $guide->clockAt($st);
+    my $start = $clock->nearestMeasure($st);
+    my $subGuide = $guide->subList($start, $start + (4 * $clock->measureTime()));
+    my $subMusic = $events->subMelody($subGuide->time(), $subGuide->reach());
+    my $loop = $subMusic->toLoop($subGuide);
+    my $exists = AutoHarp::Model::Loop->loadBy({midi => $loop->midi});
+    if ($exists && !$exists->isEmpty()) {
+      #yay!
+      return $class->new($ATTR_INSTRUMENT_CLASS => $exists->type,
+			 $ATTR_INSTRUMENT => $iStr,
+			 $ATTR_PATCH => $patch);
     }
   }
-  if ($channel eq $PERCUSSION_CHANNEL) {
-    return $class->new($ATTR_INSTRUMENT_CLASS => $DRUM_LOOP, %$self);
-  }
-  bless $self,$class;
-  return $self;
+  return;
 }
 
 sub fromString {
   my $class  = shift;
   my $string = shift;
-  my %attrs  = split(/[\:\,] /,$string);
+  my $attrs  = __parseInstrumentString($string);
   my $self = $class->new(
-			 $ATTR_INSTRUMENT_CLASS => $attrs{$ATTR_INSTRUMENT_CLASS},
-			 $ATTR_INSTRUMENT => $attrs{$ATTR_PATCH}
+			 $ATTR_INSTRUMENT_CLASS => $attrs->{$ATTR_INSTRUMENT_CLASS},
+			 $ATTR_INSTRUMENT => $attrs->{$ATTR_PATCH}
 			);
-  delete $attrs{$ATTR_PATCH};
-  delete $attrs{$ATTR_INSTRUMENT_CLASS};
-  while (my ($k,$v) = each %attrs) {
+  delete $attrs->{$ATTR_PATCH};
+  delete $attrs->{$ATTR_INSTRUMENT_CLASS};
+  while (my ($k,$v) = each %$attrs) {
     $self->{$k} = $v;
   }
   return $self;
@@ -167,7 +188,7 @@ sub instrumentClass {
 }
 
 sub formattedName {
-  return sprintf("%-8s (%s)",
+  return sprintf("%s (%s)",
 		 $_[0]->{$ATTR_INSTRUMENT_CLASS},
 		 $_[0]->name);
 }
@@ -324,9 +345,9 @@ sub playLoop {
     confess "Loop id " . $loop->id . " produced 0 duration MIDI events";
   }
   $play->time($segment->time);
-  my $c = $segment->music->clock();
+  my $c = $segment->musicBox->clock();
   if ($play->measures($c) > $segment->measures()) {
-    $play->truncateToTime($segment->music->guide->reach());
+    $play->truncateToTime($segment->musicBox->guide->reach());
     #     confess sprintf "PLAY MEASURES for %d is %d, segment measures %d, wtf?\n",
 #       $loop->id,
 # 	$play->measures($c),
@@ -351,7 +372,7 @@ sub transition {
   if ($segment->transitionIsDown) {
     #handle come-downs
     if ($music->is($ATTR_MELODY)) {
-      my $clock = $segment->music->clockAtEnd();
+      my $clock = $segment->musicBox->clockAtEnd();
       #on a come-down transition, truncate the melody instead of playing out
       my $trunc = $clock->beatTime * (2 + asOftenAsNot);
       $music->truncateToTime($segment->reach - $trunc);
@@ -364,11 +385,23 @@ sub transition {
   }
 }
 
+sub __parseInstrumentString {
+  my $string = shift;
+  return {split(/[\:\,] /,$string)};
+}
+
+sub __isValidInstrumentString {
+  my $res = __parseInstrumentString($_[0]);
+  return ($res->{$ATTR_INSTRUMENT_CLASS});
+}
+
 sub attributes {
+  confess "DO YOU CALL THIS?";
   return [];
 }
 
 sub attributeValues {
+  confess "OR DO YOU EVER CALL THIS?";
   return [];
 }
 

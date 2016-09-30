@@ -34,7 +34,7 @@ sub new {
 	if ($e->time > $end) {
 	  $end = $e->time;
 	}
-	if ($e->isMusicGuide() && !$e->isMarker()) {
+	if ($e->isMusicGuide() && !$e->isZeroEvent() && !$e->isEndEvent()) {
 	  push(@$self, $e);
 	}
       }
@@ -49,7 +49,12 @@ sub new {
 
 sub fromAttributes {
   my $class = shift;
-  my $args  = {@_};
+  my $args  = $_[0];
+
+  if (!ref($args)) {
+    $args = {@_};
+  }
+  
   my $self  = $class->new();
   $self->setClock($args->{$ATTR_CLOCK}) if ($args->{$ATTR_CLOCK});
   $self->setScale($args->{$ATTR_SCALE}) if ($args->{$ATTR_SCALE});
@@ -57,7 +62,14 @@ sub fromAttributes {
   $self->meter($args->{$ATTR_METER}) if ($args->{$ATTR_METER});
   $self->measures($args->{$ATTR_BARS} || $DEFAULT_BARS);
   $self->time($args->{$ATTR_TIME}) if ($args->{$ATTR_TIME});
-  $self->genre($args->{$ATTR_GENRE}) if ($args->{$ATTR_GENRE});
+  if (ref($args->{$ATTR_GENRE})) {
+    $self->genre($args->{$ATTR_GENRE});
+  } elsif ($args->{$ATTR_GENRE}) {
+    my $g = AutoHarp::Model::Genre->loadByName($args->{$ATTR_GENRE});
+    if (!$g->isEmpty()) {
+      $self->genre($g);
+    }
+  }
   return $self;
 }
 
@@ -337,28 +349,50 @@ sub meter {
   return $self->clock()->meter();
 }
 
+#get/set string-based key blah blah etc blah my ass
+sub key {
+  my $self = shift;
+  my $key = shift;
+  if ($key) {
+    if (AutoHarp::Scale::ValidateKey($key)) {
+      $self->setScale(AutoHarp::Scale->new($ATTR_KEY => $key));
+    } else {
+      confess "$key is not a valid musical key";
+    }
+  }
+  return $self->scale()->key();
+}
+
 #get/set genre. Can only be set this way, we don't currently
 #support multiple genres in a guide
 sub genre {
   my $self  = shift;
   my $genre = shift;
-  my @gs = (grep {$_->isGenre()} @$self);
   if ($genre) {
     my $genreEvent = AutoHarp::Event::Text->new("$ATTR_GENRE: " . $genre->name,
 						$self->time
 					       );
-    #remove will remove all other genre events
-    foreach my $g (@gs) {
-      $self->remove($g);
-    }
+    $self->clearGenre();
     #and then we add the new one
     $self->add($genreEvent);
     return $genre;
   } 
-  if ($gs[0]) {
-    return AutoHarp::Model::Genre->loadByName(($gs[0]->text() =~ /$ATTR_GENRE: (.+)/));
+  my @gs = grep {$_->isGenre()} @$self;
+  if (scalar @gs) {
+    my $g = AutoHarp::Model::Genre->loadByName(($gs[0]->text() =~ /$ATTR_GENRE: (.+)/));
+    if (!$g->isEmpty()) {
+      return $g;
+    }
   }
   return;
+}
+
+sub clearGenre {
+  my $self = shift;
+  my @gs = grep {$_->isGenre()} @$self;
+  foreach my $g (@gs) {
+    $self->remove($g);
+  }
 }
 
 #add clock midi events at the mentioned time

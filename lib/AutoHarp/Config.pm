@@ -18,7 +18,7 @@ sub MidiDirectory {
 }
 
 sub DataDirectory {
-  my $dir = _fromConfig('JSON') || 'json';
+  my $dir = _fromConfig('DATA') || 'data';
   if (!-d $dir) {
     mkdir($dir);
   }
@@ -30,7 +30,7 @@ sub MidiFile {
   $fileName =~ s/\.\w+$//;
   $fileName =~ s/\s//g;
   my $dir = MidiDirectory();
-  return "$dir$DS$fileName.midi";
+  return "$dir$DS$fileName.mid";
 }
 
 sub DataFile {
@@ -39,6 +39,14 @@ sub DataFile {
   $fileName =~ s/\s//g;
   my $dir = DataDirectory();
   return "$dir$DS$fileName.json";
+}
+
+sub QuickFile {
+  my $fileName = shift;
+  $fileName =~ s/\.\w+$//;
+  $fileName =~ s/\s//g;
+  my $dir = DataDirectory();
+  return "$dir$DS$fileName.quick";
 }
 
 sub GenreDBRoot {
@@ -83,7 +91,7 @@ sub Play {
   my $player = Player();
   if ($song && $player) {
     my $tmp = $ENV{TEMP} || "/tmp"; 
-    $tmp .= "${DS}ah.midi";
+    $tmp .= "${DS}ah.mid";
     #attempt to do a little mixing
     $song->out($tmp,1);
     if (-f $tmp) {
@@ -100,7 +108,7 @@ sub PlayOpus {
   my $player = Player();
   if ($player) {
     my $tmp = $ENV{TEMP} || "/tmp"; 
-    $tmp .= "${DS}ah.midi";
+    $tmp .= "${DS}ah.mid";
     $opus->write_to_file($tmp);
     return !system("$player $tmp");
   }

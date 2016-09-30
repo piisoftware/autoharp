@@ -1,0 +1,126 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use AutoHarp::Generator;
+use AutoHarp::Events::Guide;
+use AutoHarp::Transcription;
+use AutoHarp::Instrument;
+use AutoHarp::Constants;
+use AutoHarp::Conductor;
+use AutoHarp::Composer;
+use AutoHarp::Model::Genre;
+use AutoHarp::Clock;
+use AutoHarp::Scale;
+use AutoHarp::Fuzzy;
+use AutoHarp::Config;
+
+use strict;
+
+my $file = shift(@ARGV);
+my $genreName = join(" ",@ARGV);
+open(QFILE, "$file") or die "Couldn't read $file: $!\n";
+
+my $band  = AutoHarp::Instrument->band();
+my $clock = AutoHarp::Clock->new();
+
+my $generator = AutoHarp::Generator->new();
+my $composer  = AutoHarp::Composer->new();
+my $conductor = AutoHarp::Conductor->new();
+
+my $progs = {};
+my $elements = {};
+my $eIdx = 0;
+while(<QFILE>) {
+  if (/tempo:\s*(\d+)/i) {
+    $clock->tempo($1);
+  } elsif (/genre:\s*(\w+)/i) {
+    $genreName = $1;
+  } elsif (/(\w+)\s+part\s+\((\w+)\):\s+(.+)/i) {
+    eval {
+      $progs->{$1} = AutoHarp::Events::Progression->fromString($3);
+      $elements->{$1} = $2;
+    };
+    if ($@) {
+      die "$1 didn't parse: $@";
+    }
+    print "Read $1 part ($2)\n";
+  } elsif (/^(\w+)/ && $progs->{$1}) {
+    $composer->addToComposition(AutoHarp::Composer::CompositionElement->new($1, $elements->{$1}));
+  }
+}
+close(QFILE);
+if (!scalar keys %$progs) {
+  die "Didn't read any parts from the quickfile";
+}
+if (!$composer->hasComposition()) {
+  die "Didn't read a composition from the quickfile";
+}
+my $genre;
+if (!$genreName) {
+  my $all = AutoHarp::Model::Genre->all();
+  $genre = pickOne($all);
+} else {
+  $genre = AutoHarp::Model::Genre->loadByName($genreName);
+  if ($genre->isEmpty()) {
+    print "Genre $genreName is unknown. Valid Genres:\n";
+    print join("\n",map {$_->name} @{AutoHarp::Model::Genre->all()});
+    print "\n";
+    exit(0);
+  }
+}
+
+my $music = {};
+my $hookSource;
+foreach my $t (keys %$progs) {
+  $music->{$t} = AutoHarp::MusicBox::Base->fromProgressionAndClock($progs->{$t}, $clock);
+  $generator->melodize($music->{$t});
+  $music->{$t}->tag($t);
+  $music->{$t}->genre($genre);
+  if (!$hookSource && $elements->{$t} eq $SONG_ELEMENT_VERSE) {
+    $hookSource = $music->{$t};
+  }
+}
+my $hook = $generator->generateHook($hookSource);
+
+print "Conducting...\n";
+my $song = $conductor->conduct({$ATTR_COMPOSER => $composer,
+				$ATTR_MUSIC => $music,
+				$ATTR_INSTRUMENTS => $band,
+				$ATTR_HOOK => $hook
+			       });
+my $transcription = AutoHarp::Transcription->new();
+my $sessName      = "$genreName-" . time();
+$transcription->name($sessName);
+$transcription->song($song);
+$transcription->hook($hook);
+$transcription->instruments($band);
+print "Writing transcription...\n";
+$transcription->write();
+print "Done.\n";
+if (!$ENV{AUTOHARP_QUIET}) {
+  print "export AUTOHARP_QUIET=1 to be less verbose next time\n";
+}
+print "Genre is $genreName\n";
+printf "MIDI file is %s\n",$transcription->MIDIOut();
+printf "JSON file is %s\n",$transcription->JSONOut();
+
+if (!AutoHarp::Config::Play($song)) {
+  print "Set env var MIDI_PLAYER to a valid command-line midi player to play midi file\n";
+}
+print "Rename this session,\n";
+print "'x' to annhiliate it entirely,\n";
+print "enter to accept '$sessName' ==> "; 
+chomp(my $sName = <STDIN>);
+if (lc($sName) eq 'x') {
+  $transcription->nuke();
+  print "Goodbye $sessName. You have been deemed unworthy\n";
+} elsif ($sName) {
+  $transcription->name($sName);
+  printf "Session MIDI moved to %s\n",$transcription->MIDIOut();
+  printf "Session JSON moved to %s\n",$transcription->JSONOut();
+  $transcription->like();
+}
+exit(0);
+
+

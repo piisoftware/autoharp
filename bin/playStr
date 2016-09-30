@@ -1,0 +1,18 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use AutoHarp::Config;
+use AutoHarp::Events::Melody;
+my ($str, $meter) = @ARGV;
+my $b = AutoHarp::MusicBox::Base->new();
+$b->meter($meter);
+$b->melody(AutoHarp::Events::Melody->fromString($ARGV[0]));
+
+my $opus = $b->opus();
+
+
+$opus->dump({dump_tracks => 1});
+
+AutoHarp::Config::PlayOpus($opus);
+exit(0);

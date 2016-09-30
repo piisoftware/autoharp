@@ -47,7 +47,7 @@ sub metadata {
 }
 
 sub tag {
-  return $_[0]->scalarAccessor($ATTR_TAG,$_[1]);
+  return $_[0]->scalarAccessor($ATTR_MUSIC_TAG,$_[1]);
 }
 
 sub tags {

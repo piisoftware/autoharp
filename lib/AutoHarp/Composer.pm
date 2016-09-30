@@ -18,36 +18,40 @@ use base qw(AutoHarp::Class);
 my $CHORUS_MAX           = 4;
 my $TARGET_SEGMENT_COUNT = 12;
 my $TRUNCATE             = 'endTheFuckingSong';
-my $COMPOSITION          = 'composition';
 my $DEFAULT_MUSIC_TAG    = 'defaultElement';
 my $C_LOG                = 'compositionLog';
 my $NEXT_TAG_IDX         = 'nextTagWhatever';
+my $SEGMENT_UIDS         = 'segmentUids';
 
 sub fromDataStructure {
   my $class = shift;
   my $ds    = shift;
-  my $self  = {$C_LOG => $ds->{$C_LOG}};
-  my $comp  = $ds->{$COMPOSITION} || [];
-  foreach my $l (@$comp) {
-    my ($mTag,$se,$trans) = ($l =~ /(.+)\((.+)\), transition: (.+)/);
-    if ($mTag && $se) {
-      $self->{$ATTR_MUSIC}{$mTag} = 1;
-      push(@{$self->{$COMPOSITION}}, AutoHarp::Composer::CompositionElement->new($mTag, $se, $trans));
+  my $sawTransitions;
+  my $self = {$ATTR_COMPOSITION => []};
+  foreach my $cds (@$ds) {
+    my $ce = AutoHarp::Composer::CompositionElement->fromDataStructure($cds);
+    push(@{$self->{$ATTR_COMPOSITION}}, $ce);
+    $sawTransitions ||= ($ce->transitionOut ne $ATTR_STRAIGHT_TRANSITION);
+  }
+  bless $self, $class;
+  
+  if (!$sawTransitions) {
+    #didn't see any evidence of transitions, rebuild them:
+    my $prev;
+    foreach my $c (@{$self->{$ATTR_COMPOSITION}}) {
+      if ($prev) {
+	$prev->transition($self->decideTransition($prev->songElement(), $c->songElement));
+      }
+      $prev = $c;
     }
   }
-  bless $self,$class;
+  
   return $self;
 }
 
 sub toDataStructure {
   my $self = shift;
-  return {$C_LOG => $self->{$C_LOG},
-	  $COMPOSITION => [map {sprintf("%s(%s), transition: %s",
-					$_->musicTag(),
-					$_->songElement(),
-					$_->transition())}
-			   @{$self->{$COMPOSITION}}]
-	 };
+  die "NO. FUCK OFF";
 }
 
 sub clearMusicTags {
@@ -96,7 +100,7 @@ sub songElementCount {
 
 sub sectionCount {
   my $self = shift;
-  return ($self->{$COMPOSITION}) ? scalar @{$self->{$COMPOSITION}} : 0;
+  return ($self->{$ATTR_COMPOSITION}) ? scalar @{$self->{$ATTR_COMPOSITION}} : 0;
 }
 
 sub compose {
@@ -105,7 +109,7 @@ sub compose {
     confess "Attempted to compose without first setting any music";
   }
   
-  $self->{$COMPOSITION} = [];
+  $self->{$ATTR_COMPOSITION} = [];
   $self->{$C_LOG}       = [];
   my $prev;
   while(1) {
@@ -127,8 +131,8 @@ sub compose {
 
 sub composition {
   my $self = shift;
-  $self->{$COMPOSITION} ||= [];
-  return [@{$self->{$COMPOSITION}}];
+  $self->{$ATTR_COMPOSITION} ||= [];
+  return [@{$self->{$ATTR_COMPOSITION}}];
 }
 
 #fetch performance segments for this composition
@@ -139,7 +143,7 @@ sub performanceSegments {
   my $time = $args->{$ATTR_TIME} || 0;
   
   my $prevElt;
-  foreach my $compElt (@{$self->{$COMPOSITION}}) {
+  foreach my $compElt (@{$self->{$ATTR_COMPOSITION}}) {
     my $isRepeat = 0;
     if ($prevElt) {
       $prevElt->nextSongElement($compElt->songElement());
@@ -151,11 +155,12 @@ sub performanceSegments {
     if (!$compElt->hasMusicBox()) {
       $compElt->musicBox($args->{$compElt->musicTag()});
       if (!$compElt->hasMusicBox()) {
-	confess sprintf("Could not find music box for %s, cannot build performance segments",$compElt->musicTag());
+	confess sprintf("Could not find music box for %s (%s), cannot build performance segments",$compElt->songElement(),$compElt->musicTag);
       }
     }
     $counts->{$compElt->songElement}++ if (!$isRepeat);
     $compElt->elementIndex($counts->{$compElt->songElement});
+    $compElt->isRepeat($isRepeat);
     $compElt->time($time);
     $time = $compElt->reach();
     
@@ -164,7 +169,7 @@ sub performanceSegments {
   if ($prevElt) {
     $prevElt->nextSongElement($SONG_ELEMENT_END);
   }
-  return [map {@{$_->performanceSegments($args)}} @{$self->{$COMPOSITION}}];
+  return [map {@{$_->performanceSegments($args)}} @{$self->{$ATTR_COMPOSITION}}];
 }
 
 sub hasComposition {
@@ -176,13 +181,13 @@ sub addToComposition {
   my $self = shift;
   my $elt = shift;
   my $idx = shift;
-  if ($idx != undef && $idx < scalar @{$self->{$COMPOSITION}}) {
-    splice(@{$self->{$COMPOSITION}},$idx,0,$elt);
+  if ($idx != undef && $idx < scalar @{$self->{$ATTR_COMPOSITION}}) {
+    splice(@{$self->{$ATTR_COMPOSITION}},$idx,0,$elt);
     if ($idx > 0) {
-      $elt->transition($self->{$COMPOSITION}->[$idx - 1]->transition);
+      $elt->transition($self->{$ATTR_COMPOSITION}->[$idx - 1]->transition);
     }
   } else {
-    push(@{$self->{$COMPOSITION}}, $elt);
+    push(@{$self->{$ATTR_COMPOSITION}}, $elt);
   }
 }
 
@@ -190,38 +195,38 @@ sub addToComposition {
 sub moveElementUp {
   my $self = shift;
   my $idx = shift;
-  if ($idx > 0 && $idx < scalar @{$self->{$COMPOSITION}}) {
-    my $one = $self->{$COMPOSITION}[$idx];
-    my $two = $self->{$COMPOSITION}[$idx - 1];
+  if ($idx > 0 && $idx < scalar @{$self->{$ATTR_COMPOSITION}}) {
+    my $one = $self->{$ATTR_COMPOSITION}[$idx];
+    my $two = $self->{$ATTR_COMPOSITION}[$idx - 1];
     my $ot = $one->transition();
     $one->transition($two->transition);
     $two->transition($ot);
-    $self->{$COMPOSITION}[$idx] = $two;
-    $self->{$COMPOSITION}[$idx - 1] = $one;
+    $self->{$ATTR_COMPOSITION}[$idx] = $two;
+    $self->{$ATTR_COMPOSITION}[$idx - 1] = $one;
   }
 }
 
 sub moveElementDown {
   my $self = shift;
   my $idx = shift;
-  if ($idx < $#{$self->{$COMPOSITION}}) {
-    my $one = $self->{$COMPOSITION}[$idx];
-    my $two = $self->{$COMPOSITION}[$idx + 1];
+  if ($idx < $#{$self->{$ATTR_COMPOSITION}}) {
+    my $one = $self->{$ATTR_COMPOSITION}[$idx];
+    my $two = $self->{$ATTR_COMPOSITION}[$idx + 1];
     my $ot = $one->transition();
     $one->transition($two->transition);
     $two->transition($ot);
-    $self->{$COMPOSITION}[$idx] = $two;
-    $self->{$COMPOSITION}[$idx + 1] = $one;
+    $self->{$ATTR_COMPOSITION}[$idx] = $two;
+    $self->{$ATTR_COMPOSITION}[$idx + 1] = $one;
   }
 }
 
 sub removeElement {
   my $self = shift;
   my $idx = shift;
-  if ($idx < scalar @{$self->{$COMPOSITION}}) {
-    my $gone = splice(@{$self->{$COMPOSITION}},$idx,1);
+  if ($idx < scalar @{$self->{$ATTR_COMPOSITION}}) {
+    my $gone = splice(@{$self->{$ATTR_COMPOSITION}},$idx,1);
     if ($idx > 0) {
-      $self->{$COMPOSITION}[$idx - 1]->transition($gone->transtion());
+      $self->{$ATTR_COMPOSITION}[$idx - 1]->transition($gone->transtion());
     }
   }
 }
@@ -248,12 +253,12 @@ sub decideNextSongElement {
   my $chorusCt  = $self->songElementCount($SONG_ELEMENT_CHORUS);
   my $wasChorus = ($prevElement eq $SONG_ELEMENT_CHORUS);
   my $wasRepeat    = ($prevElement && 
-		      scalar @{$self->{$COMPOSITION}} > 1 &&
-		      $self->{$COMPOSITION}->[-2]->songElement eq $prevElement);
+		      scalar @{$self->{$ATTR_COMPOSITION}} > 1 &&
+		      $self->{$ATTR_COMPOSITION}->[-2]->songElement eq $prevElement);
 
   #truncate now?
   if (!$self->{$TRUNCATE} && 
-      scalar @{$self->{$COMPOSITION}} > $TARGET_SEGMENT_COUNT) {
+      scalar @{$self->{$ATTR_COMPOSITION}} > $TARGET_SEGMENT_COUNT) {
     $self->{$TRUNCATE} = asOftenAsNot;
   }
 
@@ -449,7 +454,8 @@ sub decideNextSongElement {
   my $eltIdx = ($nextElement eq $prevElement) ? $soFar : $soFar + 1;
   my $mTag = ($self->{$ATTR_MUSIC}{$nextElement}) ? $nextElement : $self->defaultMusicTag();
 
-  return AutoHarp::Composer::CompositionElement->new($mTag, $nextElement);
+  return AutoHarp::Composer::CompositionElement->new($ATTR_MUSIC_TAG => $mTag,
+						     $SONG_ELEMENT => $nextElement);
 }
 
 

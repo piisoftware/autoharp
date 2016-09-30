@@ -109,7 +109,7 @@ sub split {
   my $tracks   = [];
   my $drumRef  = {};
   foreach my $m (@{$self->notes()}) {
-    my $d = $m->pitch; #$MIDI::notenum2percussion{$m->pitch};
+    my $d = $MIDI::notenum2percussion{$m->pitch};
     if (!$drumRef->{$d}) {
       $drumRef->{$d} = AutoHarp::Events::DrumTrack->new();
       $drumRef->{$d}->time($self->time);

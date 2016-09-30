@@ -5,7 +5,6 @@ use AutoHarp::MusicBox::Song;
 use AutoHarp::Fuzzy;
 use AutoHarp::Constants;
 use AutoHarp::Instrument;
-use AutoHarp::MusicBox::Song::Segment;
 use Carp;
 
 use Data::Dumper;
@@ -62,8 +61,12 @@ sub conductSegment {
   my $segment     = shift;
   my $instMap     = shift;
   my $loops       = shift;
-
-  printf("%5d) %s:\n",$segment->time,uc($segment->songElement)) if ($VERBOSE);
+  
+  printf("%5d) %s: (%s)\n",
+	 $segment->time,
+	 uc($segment->songElement),
+	 $segment->description()
+	) if ($VERBOSE);
 
   my $deferrals = [];
   my $plays     = {};  
@@ -94,93 +97,56 @@ sub conductSegment {
     }
   }
   
-  #now loop through the instruments. 
-  #if they are already registered as players, get their plays
-  #otherwise, get their initial decision for this segment
-  if ($segment->hasPlayers()) {
-    #re-zero the drummer's decision
-    $drummerDecision = 0;
-    foreach my $i (@{$segment->players()}) {
-      my $inst = $instMap->{$i};
-      if (!$inst) {
-	confess "Found unrecognized player $i in segment.";
-      }
-      printf("\t%s (%s) IN PLAYLIST (follows: %s)\n",
-	     $inst->name(),
-	     $inst->instrumentClass,
-	     $inst->follow() || 'nobody') if ($VERBOSE);
-
-      if ($i eq $drummerUid) {
-	#the drummer's in the list of pre-ordained players. Noted...
-	$drummerDecision = 1;
-	next;
-      }
-
-      if ($inst->follow()) {
-	push(@$deferrals, {$DECISION => 1, $INST => $inst});
-      } else {
-	$self->handlePlay({$ATTR_INSTRUMENT => $inst,
-			   $SONG_SEGMENT    => $segment,
-			   $PLAY_LOG        => $plays,
-			   $ATTR_FOLLOW     => $drummerUid,
-			   $LOOP_ID         => $loops->{$i}
-			  });
-      }
-    }
-  } else {
-    foreach my $i (values %{$instMap}) {
-      next if ($i->uid eq $drummerUid);
-      my $decision = $i->decideSegment($segment);
-      printf("\t%s (%s) decides %s Play (follows: %s)\n",
-	     $i->name(),
-	     $i->instrumentClass,
-	     $decision ? 'to' : 'NOT to',
-	     $i->follow() || 'nobody') if ($VERBOSE);
-      if ($i->follow()) {
-	#this person would prefer to follow, so defer for now, noting their decision
-	push(@$deferrals, {$DECISION => $decision, $INST => $i});
-      } elsif ($decision) {
-	#go ahead and fetch the play now
-	$self->handlePlay({$ATTR_INSTRUMENT => $i,
-			   $SONG_SEGMENT    => $segment,
-			   $PLAY_LOG        => $plays,
-			   $ATTR_FOLLOW     => $drummerUid,
-			   $LOOP_ID         => $loops->{$i->uid}
-			  });
-      }
+ 
+  foreach my $i (values %{$instMap}) {
+    next if ($i->uid eq $drummerUid);
+    my $loop     = $loops->{$i->uid};
+    my $decision = ($loop) ? 1 : $i->decideSegment($segment);
+    
+    if ($i->follow() && !$loop) {
+      #this person would prefer to follow, so defer for now, noting their decision
+      push(@$deferrals, {$DECISION => $decision, $INST => $i});
+    } elsif ($decision) {
+      #go ahead and fetch the play now
+      $self->handlePlay({$ATTR_INSTRUMENT => $i,
+			 $SONG_SEGMENT    => $segment,
+			 $PLAY_LOG        => $plays,
+			 $ATTR_FOLLOW     => $drummerUid,
+			 $LOOP_ID         => $loop
+			});
+    } elsif ($VERBOSE) {
+      printf("\t%s(%s) decided NOT TO PLAY\n",$i->name,$i->instrumentClass);
     }
   }
   
   #who played?
   if (scalar keys %$plays < 2 && !$drummerDecision) {
-    #nobody? Fuck off, you lazy bitches
+    #Fuck off, you lazy bitches
     my $bass     = (grep {$_->is($BASS_INSTRUMENT)} values %$instMap)[0];
     my $rhythm   = (grep {$_->is($RHYTHM_INSTRUMENT)} values %$instMap)[0];
     my $theme    = pickOne(grep {$_->is($THEME_INSTRUMENT)} values %$instMap);
     
     if ($theme && sometimes) {
       #sometimes just hand it off to a theme
-      printf "\t forcing...\n" if ($VERBOSE);
+      printf("\t forcing %s...\n",$theme->name) if ($VERBOSE);
       $self->handlePlay({$ATTR_INSTRUMENT => $theme,
 			 $SONG_SEGMENT    => $segment,
 			 $PLAY_LOG        => $plays,
-			 $ATTR_FOLLOW     => $drummerUid,
-			 $LOOP_ID         => $loops->{$theme->uid}
+			 $ATTR_FOLLOW     => $drummerUid
 			});
     } else {
       my $hasMusic;
       if ($bass && sometimes) {
-	printf "\t forcing...\n" if ($VERBOSE);
+	printf("\t forcing %s...\n",$bass->name) if ($VERBOSE);
 	$self->handlePlay({$ATTR_INSTRUMENT => $bass, 
 			   $SONG_SEGMENT    => $segment, 
 			   $PLAY_LOG        => $plays, 
-			   $ATTR_FOLLOW     => $drummerUid,
-			   $LOOP_ID         => $loops->{$bass->uid}
+			   $ATTR_FOLLOW     => $drummerUid
 			  });
 	$hasMusic = 1;
       }
       if ($rhythm && sometimes) {
-	printf "\t forcing...\n" if ($VERBOSE);
+	printf("\t forcing %s...\n",$rhythm->name) if ($VERBOSE);
 	$self->handlePlay({$ATTR_INSTRUMENT => $rhythm, 
 			   $SONG_SEGMENT    => $segment, 
 			   $PLAY_LOG        => $plays, 
@@ -226,11 +192,12 @@ sub conductSegment {
   #we have everybody's music who's playin'
   #record the plays, clear everybody else's play flags
   foreach my $id (keys %$instMap) {
+    #clear everybody's play log and then log who played
+    $instMap->{$id}->clearPlayLog();
     if ($plays->{$id} && 
 	($drummerDecision || $id ne $drummerUid)) {
       $segment->addPerformance($instMap->{$id},$plays->{$id});
-    } else {
-      $instMap->{$id}->clearPlayLog();
+      $instMap->{$id}->isPlaying(1);
     }
   }
 }
@@ -272,6 +239,7 @@ sub conduct {
   print "Conducting segments...\n" if ($VERBOSE);
   foreach my $segment (@$pSegs) {
     my $segmentLoops = ($loops) ? $loops->{$segment->uid} : {};
+
     if ($segment->hasHook()) {
       if ($segment->time != $segment->musicBox->time ||
 	  $segment->time != $segment->hook->time) {
@@ -298,23 +266,29 @@ sub handlePlay {
   
   my $followId = $inst->follow() || $fSuggestion;
   my $play;
+  my $wasLoop = 0;
   if ($loop && !$loop->isEmpty()) {
-    $inst->playLoop($segment, $loop);
+    $wasLoop = 1;
+    $play = $inst->playLoop($segment, $loop);
   } else {
     $play = $inst->play($segment, $playLog->{$followId});
-    $inst->clearPlayLog();
   }
 
   if ($play && (!ref($play) || !$play->can('hasNotes'))) {
     print Dumper $play,$inst;
     confess "WHAT THE HELL IS THIS?";
   }
+  
   if ($play && $play->hasNotes()) {
     $playLog->{$inst->id} = $play;
-    printf("\t %s playing for %d ticks starting at %d\n",
-	   $inst->name,
-	   $play->duration,
-	   $play->time) if ($VERBOSE);
+    if ($VERBOSE) {
+      printf("\t%s (%s) %s at %d\n",
+	     $inst->name,
+	     $inst->instrumentClass,
+	     ($loop) ? "repeated loop " . $loop->id : "played",
+	     $play->time);
+    } 
+    
     my $mt     = $segment->musicBox->clock->measureTime;
     my $emt    = $segment->musicBox->clockAtEnd->measureTime;
     my $buffer = ($inst->isDrums()) ? ($mt * 4) : $mt;
@@ -337,23 +311,6 @@ sub handlePlay {
     return 1;
   }
   return;
-}
-
-sub reconstructSong {
-  my $self = shift;
-  my $args = shift;
-  
-  if (ref($args) ne 'HASH') {
-    confess "Bad args passed to reconstruct. Cannot...reconstruct.";
-  }
-
-  my $songSegments = $args->{$ATTR_SONG};
-  if (!$songSegments) {
-    confess "No song segments passed, cannot reconstruct.";
-  }
-  $args->{$ATTR_COMPOSITION} = 
-    AutoHarp::MusicBox::Song::CompositionFromDataStructure($songSegments);
-  return $self->conduct($args);
 }
 
 #TODO -- MOVE TO SOME IMPORT WIZARD SOME DAY
