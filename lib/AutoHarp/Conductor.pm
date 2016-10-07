@@ -60,7 +60,7 @@ sub conductSegment {
   my $self        = shift;
   my $segment     = shift;
   my $instMap     = shift;
-  my $loops       = shift;
+  my $loops       = shift || {};
   
   printf("%5d) %s: (%s)\n",
 	 $segment->time,
@@ -82,13 +82,15 @@ sub conductSegment {
   
   if ($drummer) {
     $drummerUid = $drummer->uid();
+    my $dLoop   = $loops->{$drummerUid};
     #note first whether or not the drummer wishes to actually play
-    $drummerDecision = $drummer->decideSegment($segment);
+    $drummerDecision = $dLoop || $drummer->decideSegment($segment);
+
     #log her performance either way...
     $self->handlePlay({$ATTR_INSTRUMENT => $drummer,
 		       $SONG_SEGMENT    => $segment,
 		       $PLAY_LOG        => $plays,
-		       $LOOP_ID         => $loops->{$drummerUid}
+		       $LOOP_ID         => $dLoop
 		      }
 		     );
     if (!$plays->{$drummerUid} || !$plays->{$drummerUid}->duration) {
@@ -100,10 +102,10 @@ sub conductSegment {
  
   foreach my $i (values %{$instMap}) {
     next if ($i->uid eq $drummerUid);
-    my $loop     = $loops->{$i->uid};
-    my $decision = ($loop) ? 1 : $i->decideSegment($segment);
+    my $loop = $loops->{$i->uid};
+    my $decision = $loop || $i->decideSegment($segment);
     
-    if ($i->follow() && !$loop) {
+    if ($i->follow()) {
       #this person would prefer to follow, so defer for now, noting their decision
       push(@$deferrals, {$DECISION => $decision, $INST => $i});
     } elsif ($decision) {
@@ -202,6 +204,82 @@ sub conductSegment {
   }
 }
 
+sub reconduct {
+  my $self = shift;
+  my $song = shift;
+
+  #do a pre-pass to get all the instruments
+  my $instMap = {};
+  foreach my $segment (@{$song->segments()}) {
+    foreach my $pId (grep {!exists $instMap->{$_}} @{$segment->players}) {
+      $instMap->{$pId} = $segment->player($pId);
+      #clear everybody's play flags to start
+      $instMap->{$pId}->isPlaying(0);
+    }
+  }
+  my $drummer = $instMap->{$DRUM_LOOP};
+  if (!$drummer) {
+    print Dumper $instMap;
+    die "WTF? Where's the drummer?";
+  }
+  
+  foreach my $segment (@{$song->segments()}) {
+    printf("%5d) %s: (%s)\n",
+	   $segment->time,
+	   uc($segment->songElement),
+	   $segment->description()
+	  ) if ($VERBOSE);
+    my $plays = {};
+    if (!$segment->hasPerformanceForPlayer($DRUM_LOOP)) {
+      if ($VERBOSE) {
+	printf("\t%s (%s) being regenerated at %d\n",
+	       $drummer->name,
+	       $drummer->instrumentClass,
+	       $segment->time);
+      }
+      $self->handlePlay({$ATTR_INSTRUMENT => $drummer,
+			 $SONG_SEGMENT    => $segment,
+			 $PLAY_LOG        => $plays
+			}
+		       );
+    }
+    my $replaceDrums = 0;
+    foreach my $pId (@{$segment->players()}) {
+      my $inst = $segment->player($pId);
+      if ($segment->hasPerformanceForPlayer($pId)) {
+	if ($VERBOSE) {
+	  printf("\t%s (%s) already playing at %d\n",
+		 $inst->name,
+		 $inst->instrumentClass,		 
+		 $segment->time);
+	}
+      } elsif ($pId eq $DRUM_LOOP) {
+	#the drummer was playing, and doesn't have a play already
+	$replaceDrums = 1;
+      } else {
+	if ($VERBOSE) {
+	  printf("\t%s (%s) newly playing at %d\n",
+		 $inst->name,
+		 $inst->instrumentClass,
+		 $segment->time);
+	}
+	#go ahead and fetch the play now
+	$self->handlePlay({$ATTR_INSTRUMENT => $inst,
+			   $SONG_SEGMENT    => $segment,
+			   $PLAY_LOG        => $plays,
+			   $ATTR_FOLLOW     => $drummer->uid
+			  });
+      }
+    }
+    while (my ($id, $inst) = each %$instMap) {
+      $inst->isPlaying(0);
+      if ($plays->{$id} && ($id ne $DRUM_LOOP || $replaceDrums)) {
+	$inst->isPlaying(1);
+	$segment->addPerformance($inst, $plays->{$id});
+      }
+    }
+  }
+}
 
 sub conduct {
   my $self        = shift;
@@ -307,68 +385,11 @@ sub handlePlay {
       $play->dump();
       confess "That indicates badness, so I died";
     }
+    
     $inst->isPlaying(1);
     return 1;
   }
   return;
-}
-
-#TODO -- MOVE TO SOME IMPORT WIZARD SOME DAY
-sub importFile {
-  my $self   = shift;
-  my $instrs = $self->SUPER::importFile(@_);
-  my $trackInsts;
-  for (my $i = 0; $i < scalar @$instrs; $i++) {
-    my $inst      = $instrs->[$i];
-    my $role      = $inst->role();
-    if ($role ne $ATTR_MELODY && $role ne $ATTR_PROGRESSION) {
-      #legacy shit
-      my $tInfo     = $inst->getTrackInfo();
-      $role         = $tInfo->get('segmentMusic');
-      if ($role) {
-	$inst->deleteTrackInfo('segmentMusic');
-	$inst->role($role);
-      }
-    }
-    if ($role) {
-      #this is the track which lists the melody or progression
-      #stick it in a separate hash and remove it from the track list
-      $trackInsts->{$role} = $inst;
-      splice(@$instrs,$i,1);
-      $i--;
-    }
-  }
-  if (!$trackInsts->{$ATTR_MELODY} || !$trackInsts->{$ATTR_PROGRESSION}) {
-    confess "Couldn't find melody or progression tracks--cannot import this file";
-  }
-  #populate the song log
-  my $segments = $trackInsts->{$ATTR_MELODY}->getSongSegmentsFromScore;
-  foreach my $seg (@$segments) {
-    my $players = [];
-    #figure out who was playing then
-    if ($seg->duration > 0) {
-      foreach my $i (@$instrs) {
-	my $isPlaying = $i->hasNotes($seg->time,$seg->reach) || '0';
-	$i->playLog($seg->time, $isPlaying);
-	$i->segmentLogMsg($seg,($isPlaying) ? "IS playing segment" : "IS NOT playing segment");
-	if ($isPlaying) {
-	  push(@$players,$i);
-	}
-      }
-      my $prog = $trackInsts->{$ATTR_PROGRESSION}->progression($seg->time,$seg->reach);
-      $seg->progression($prog);
-      if (!$seg->melody || !$seg->progression) {
-	if (!$prog) {
-	  print "No prog from this\n";
-	  $trackInsts->{$ATTR_PROGRESSION}->dumpScore($seg->time, $seg->reach);
-	}
-	confess "Not enough music found for segment";
-      }
-    }
-    push(@{$self->{songLog}},{$SONG_SEGMENT => $seg,
-			      players      => $players});
-  }
-  return $instrs;
 }
 
 "I'm definitely shaking";

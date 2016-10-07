@@ -53,6 +53,11 @@ sub isSongBeginning {
   return $_[0]->scalarAccessor('beginning',$_[1]);
 }
 
+sub dump {
+  my $self = shift;
+  printf "%s (%s)\n",$self->songElement,$self->musicTag();
+}
+
 sub time {
   my $self = shift;
   my $time = shift;

@@ -108,14 +108,24 @@ sub play {
   if ($beat->duration() > $segment->duration()) {
     $beat->truncate($segment->duration());
   }
-    
+
+  $self->handleLeadIn($segment, $beat);
+  $self->handleTransition($segment,$beat);
+  return $beat;
+}
+
+sub handleLeadIn {
+  my $self    = shift;
+  my $segment = shift;
+  my $beat    = shift;
   if (!$self->isPlaying() && !$beat->hasLeadIn()) {
     #TODO: this is also ruining everything
     #did I start playing just now? Can I find a pickup?
     my $pickup = $self->findLeadIn($segment);
     if ($pickup) {
       my $pTrack = $pickup->events();
-      my $pMeas = $pTrack->measures($segment->musicBox->clock);
+      my $clock  = $segment->musicBox->clock;
+      my $pMeas = $pTrack->measures($clock);      
       if ($pMeas > 1 && unlessPigsFly) {
 	$pTrack->time(0);
 	#cut this down to its last measure. Or 2.
@@ -128,8 +138,29 @@ sub play {
       $beat->add($pTrack);
     }
   }
-  $self->handleTransition($segment,$beat);
-  return $beat;
+}
+
+sub playLoop {
+  my $self    = shift;
+  my $segment = shift;
+  my $loop    = shift;
+  my $play    = $loop->events();
+  $play->time($segment->time);
+
+  my $c = $segment->musicBox->clock();
+  while ($play->measures($c) < $segment->measures()) {
+    #repeat this loop if there's room
+    my $rDur = $play->measures($c) * $c->measureTime(); 
+    $play->repeat($rDur);
+  }
+
+  if ($play->measures($c) > $segment->measures()) {
+    #and trim back down if necessary
+    $play->truncateToTime($segment->musicBox->guide->reach());
+  }
+  
+  $self->handleLeadIn($segment, $play);
+  return $play;
 }
 
 #do any massaging of the last measure

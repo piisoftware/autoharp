@@ -96,6 +96,49 @@ sub play {
   return $perf;
 }
 
+sub playLoop {
+  my $self    = shift;
+  my $segment = shift;
+  my $loop    = shift;
+  my $play    = $self->SUPER::playLoop($segment,$loop);
+
+  
+  #instead of playing what we're given, build a guide out of it
+  #and re-adjust to the chords we're passed, in case they're different
+  my $seen = {};
+  #start by resetting appropriate play vars
+  $self->{$PLAY_VARS}{$CHORD_TYPE} = $EVENT_NOTE;
+  my $lClone = $loop->events()->clone();
+  $lClone->time($segment->time);
+
+  my $rhythmGuide = AutoHarp::Events::DrumTrack->new();
+  $rhythmGuide->time($segment->time);
+  $self->{$PLAY_VARS}{$OCTAVE} = 6;
+  foreach my $note (@{$lClone->notes()}) {
+    if ($seen->{$note->time}++) {
+      if ($self->{$PLAY_VARS}{$CHORD_TYPE} eq $EVENT_NOTE) {
+	$self->{$PLAY_VARS}{$CHORD_TYPE} = $DOUBLE_STOP;
+      }
+      if ($seen->{$note->time} > 2) {
+	$self->{$PLAY_VARS}{$CHORD_TYPE} = $EVENT_CHORD;
+      }
+    } else {
+      if ($note->octave() < $self->{$PLAY_VARS}{$OCTAVE}) {
+	$self->{$PLAY_VARS}{$OCTAVE} = $note->octave();
+      }
+
+      my $g = $note->clone();
+      $g->pitch($DEFAULT_ROOT_PITCH);
+      $rhythmGuide->add($g);
+    }
+  }
+  my $performance = AutoHarp::Events::Performance->new();
+  $performance->time($segment->time);
+  $self->playToRhythmGuide($performance,$segment,$rhythmGuide);
+  
+  return $performance;
+}
+
 #the basis upon which we decide our type of rhythm
 sub setPlayVariables {
   my $self      = shift;
@@ -183,12 +226,28 @@ sub buildLoop {
     return $loop;
   }
 
-  
   #gets an array of measure times for the given loop
   my $rhythmGuide = $self->buildRhythmGuide($segment,$guidePerformance,$followHats);
+
+  $self->playToRhythmGuide($loop, $segment, $rhythmGuide);
+  return $loop;
+}
+
+sub playToRhythmGuide {
+  my $self        = shift;
+  my $loop        = shift;
+  my $segment     = shift;
+  my $rhythmGuide = shift;
+  
   my $pattern;
   my $soundingUntil;
   my $lastPitch;
+
+  my $music       = $segment->musicBox();
+  my $progression = $music->progression();
+  my $octave      = $self->{$PLAY_VARS}{$OCTAVE};
+  my $chordType   = $self->{$PLAY_VARS}{$CHORD_TYPE};
+
   for(my $i = 0; $i < scalar @$rhythmGuide; $i++) {
     my $this  = $rhythmGuide->[$i];
     my $next  = $rhythmGuide->[$i + 1];
@@ -246,6 +305,7 @@ sub buildLoop {
 		      $toNextBeat,
 		      $toNextNote);
     }
+    
     my $notes = [];
     #start with all the notes in the chord. 
     #We may ignore them 
@@ -291,7 +351,6 @@ sub buildLoop {
       $loop->add($n);
     }
   }
-  return $loop;
 }
 
 sub buildRhythmGuide {
@@ -314,7 +373,6 @@ sub buildRhythmGuide {
       @drums = grep {asOftenAsNot} keys %$hits;
     }
   }
-
   
   if (@drums) {
     foreach my $drum (@drums) {

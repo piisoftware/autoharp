@@ -20,6 +20,19 @@ sub fromParent {
   return bless $parent->clone(), $class;
 }
 
+sub dump {
+  my $self = shift;
+  $self->SUPER::dump();
+  if ($self->hasPerformances()) {
+    while (my ($uid, $data) = each %{$self->{$PERFORMANCES}}) {
+      if ($data->{$PLAYED}) {
+	print "$uid => \n";
+	$data->{$PLAYED}->dump();
+      }
+    }
+  }
+}
+
 sub time {
   my $self = shift;
   my $time = shift;
@@ -188,6 +201,13 @@ sub player {
     $self->{$PERFORMANCES}{$id}{$PLAYER} : undef
 }
 
+sub playerPerformance {
+  my $self = shift;
+  my $id   = shift;
+  return (exists $self->{$PERFORMANCES}{$id}) ?
+    $self->{$PERFORMANCES}{$id}{$PLAYED} : undef;
+}
+
 sub hasPlayers {
   return scalar keys %{$_[0]->{$PERFORMANCES}};
 }
@@ -197,11 +217,25 @@ sub players {
   return [keys %{$self->{$PERFORMANCES}}];
 }
 
-#note that we expect a performance from a particular instrument
-sub addPerformerId {
+sub nukePerformer {
   my $self = shift;
-  my $id   = shift;
-  $self->{$PERFORMANCES}{$id} ||= {};
+  my $pId  = shift;
+  delete $self->{$PERFORMANCES}{$pId};
+}
+
+sub clearPerformanceForPlayer {
+  my $self = shift;
+  my $pId  = shift;
+  if (exists $self->{$PERFORMANCES}{$pId}) {
+    delete $self->{$PERFORMANCES}{$pId}{$PLAYED};
+  }
+}
+
+#note that we expect a performance from a particular instrument
+sub addPerformer {
+  my $self = shift;
+  my $inst = shift;
+  $self->{$PERFORMANCES}{$inst->uid} ||= {$PLAYER => $inst};
 }
 
 sub hasPerformances {
@@ -212,6 +246,14 @@ sub hasPerformances {
     }
   }
   return;
+}
+
+sub hasPerformanceForPlayer {
+  my $self = shift;
+  my $id   = shift;
+  return (exists $self->{$PERFORMANCES}{$id} && 
+	  exists $self->{$PERFORMANCES}{$id}{$PLAYED} &&
+	  ref($self->{$PERFORMANCES}{$id}{$PLAYED}));
 }
 
 sub addPerformance {

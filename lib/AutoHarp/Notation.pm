@@ -285,6 +285,7 @@ sub String2Progression {
     my $tTime = 0;
     my $clock = $guide->clockAt($mTime);
     my @tokens = grep {/\S/ && (s/\s+//g || 1)} split($CHORD_E,$measure);
+    my $hasTimeMarkers = 0;
     while (scalar @tokens) {
       my $chord = shift(@tokens);
       if ($chord eq $SPACE_CHAR || $chord eq $STRUM_CHAR) {
@@ -294,6 +295,11 @@ sub String2Progression {
 	#multiple token chord (e.g. "Bm7 over A")
 	$chord .= " " . shift(@tokens) . " " . shift(@tokens);
       }
+
+      if (scalar @tokens) {
+	$hasTimeMarkers = 1;
+      }
+
       my $timeStr  = ($tokens[0] =~ /^[A-G]/) ? "" : shift(@tokens);
       my $duration = _string2ChordTime($timeStr,$mTime);
       $tTime += $duration;
@@ -302,14 +308,20 @@ sub String2Progression {
 	if (!$newChord) {
 	  confess "Couldn't produce a valid chord from $chord\nin:\n$measure\n$string";
 	}
-	$newChord->time($mTime);
+	$newChord->time($mTime);	
 	$newChord->duration($duration);
 	$progression->add($newChord);
       } 
       $mTime += $duration;
     }
     if ($tTime != $clock->measureTime()) {
-      confess "Measure '$measure' in\n$string\nhas an incorrect number of beats (has $tTime, wants " . $clock->measureTime();
+      if ($hasTimeMarkers) {
+	confess "Measure '$measure' in\n$string\nhas an incorrect number of beats (has $tTime, wants " . $clock->measureTime();
+      } else {
+	#there was no time symbols in this measure, so it was just one chord
+	#extended it to the length of the measure
+	$progression->[-1]->duration($clock->measureTime);
+      }
     }
   }
   return $progression;

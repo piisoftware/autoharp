@@ -44,11 +44,21 @@ sub addSegment {
   push(@{$self->{$SEGMENTS}},$segment);
 }
 
+sub spliceSegment {
+  my $self    = shift;
+  my $segment = shift;
+  my $where   = shift;
+  splice(@{$self->{$SEGMENTS}},$where,0,$segment);
+  $self->retimeSegments();
+}
+
 sub retimeSegments {
   my $self = shift;
   if ($self->hasSegments()) {
     my $startSeg  = $self->segments()->[0];
-    my $startTime = $startSeg->time;
+    #rezero everything
+    my $startTime = 0;
+    $startSeg->time($startTime);
     my $soundTime = $startSeg->soundingTime;
     if ($soundTime < 0) {
       $startTime = $startSeg->musicBox->clock->roundToNextMeasure(abs($soundTime));

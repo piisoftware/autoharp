@@ -1,6 +1,5 @@
 package AutoHarp::Events::DrumTrack;
 
-
 use base qw(AutoHarp::Events::Melody);
 use AutoHarp::Notation;
 use AutoHarp::Constants;

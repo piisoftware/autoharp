@@ -334,7 +334,7 @@ sub play {
   confess "WHAT ARE YOU ASKING ME FOR? SERIOUSLY, I AM SERIOUSLY DUMB";
 }
 
-sub playLoop {
+sub legacy_playLoop {
   my $self = shift;
   my $segment = shift;
   my $loop = shift;
@@ -348,21 +348,23 @@ sub playLoop {
   my $c = $segment->musicBox->clock();
   if ($play->measures($c) > $segment->measures()) {
     $play->truncateToTime($segment->musicBox->guide->reach());
-    #     confess sprintf "PLAY MEASURES for %d is %d, segment measures %d, wtf?\n",
-#       $loop->id,
-# 	$play->measures($c),
-# 	  $segment->measures();
   }
   while ($play->measures($c) <= int($segment->measures() / 2)) {
-    printf "PLAY MEASURES for %d is %d, segment measures %d, repeating\n",
-      $loop->id,
-	$play->measures($c),
-	  $segment->measures();
     #repeat this loop if there's room
     my $rDur = $play->measures($c) * $c->measureTime(); 
     $play->repeat($rDur);
   }
   return $play;
+}
+
+#exploit the Hook adaptOnto function to replay a loop
+sub playLoop {
+  my $self     = shift;
+  my $segment  = shift;
+  my $loop     = shift;
+  my $newHook  = AutoHarp::MusicBox::Hook->new($ATTR_GUIDE => $segment->musicBox()->guide,
+					       $ATTR_MELODY => $loop->events());
+  return $newHook->adaptOnto($segment->musicBox())->melody();
 }
 
 sub transition {

@@ -96,7 +96,6 @@ sub subMusic {
 sub adaptOnto {
   my $self           = shift;
   my $adaptOntoMusic = shift;
-  my $gen            = AutoHarp::Generator->new();
   my $adaptee        = $adaptOntoMusic->clone();
 
   if (!$self->duration()) {

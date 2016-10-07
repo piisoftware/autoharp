@@ -72,13 +72,13 @@ sub tracks {
 	if ($inst && $inst->isDrums) {
 	  $score->setVolume(60);
 	} elsif ($inst && $inst->is($BASS_INSTRUMENT)) {
-	  $score->setVolume(40);
+	  $score->setVolume(35);
 	} elsif ($inst && $inst->is($PAD_INSTRUMENT)) {
-	  $score->setVolume(50);
+	  $score->setVolume(45);
 	} elsif ($inst && $inst->is($RHYTHM_INSTRUMENT)) {
-	  $score->setVolume(50);
-	} elsif ($inst && $inst->is($LEAD_INSTRUMENT)) {
 	  $score->setPan(-10);
+	} elsif ($inst && $inst->is($LEAD_INSTRUMENT)) {
+	  $score->setVolume(55);
 	} elsif ($inst && $inst->is($HOOK_INSTRUMENT)) {
 	  $score->setPan(10);
 	} else {

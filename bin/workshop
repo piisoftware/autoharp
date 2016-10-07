@@ -17,36 +17,42 @@ print "\n\n";
 my $prompt = "==> ";
 my $OUT = $term->OUT || \*STDOUT;
 my $env = AutoHarp::Environment->new();
-while ( defined (my $line = $term->readline($prompt)) ) {
-  my @tokens = split(/\s+/, $line);
-  my $cmd = lc(shift(@tokens));
-  if (!$cmd) {
-    next;
-  } elsif ($cmd eq 'q' || $cmd eq 'quit') {
-    last;
-  }
-
-  my $func = "cmd_$cmd";
-
-  if (!$env->can($func)) {
-    print "$cmd is an unrecognized command\n";
-    next;
-  }
-  eval {
-    $env->$func(@tokens);
-  };
-  if ($@) {
-    print "That didn't work, did it?\n";
-    print $@;
-    print "\n\n";
-  } else {
-    while ($env->hasMsg()) {
-      print $env->dequeueMsg();
-      print "\n";
+print "Starting midi server...\n\n";
+$env->startServer();
+OUTER:
+while ( defined (my $input = $term->readline($prompt)) ) {
+  foreach my $line (split(/\s*;\s*/,$input)) {
+    
+    my @tokens = split(/\s+/, $line);
+    my $cmd = lc(shift(@tokens));
+    if (!$cmd) {
+      next;
+    } elsif ($cmd eq 'q' || $cmd eq 'quit') {
+      last OUTER;
     }
-    $term->addhistory($_) if /\S/;
+    
+    my $func = "cmd_$cmd";
+    
+    if (!$env->can($func)) {
+      print "$cmd is an unrecognized command\n";
+      next;
+    }
+    eval {
+      $env->$func(@tokens);
+    };
+    if ($@) {
+      print "That didn't work, did it?\n";
+      print $@;
+      print "\n\n";
+    } else {
+      while ($env->hasMsg()) {
+	print $env->dequeueMsg();
+	print "\n";
+      }
+      $term->addhistory($line);
+    }
   }
 }
-$env->cleanUp();
+$env->stopServer();
 
 exit(0);

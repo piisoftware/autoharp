@@ -119,8 +119,8 @@ sub regenerateFromJSON {
   }
 
   $self->name(($file =~ /(\w+)\.?\w*$/)[0]);
+  $self->loops($ds->{$ATTR_LOOPS});
 
-  my $loops = $ds->{$ATTR_LOOPS};
   my $guide; 
   if ($ds->{$ATTR_MUSIC}) {
     while (my ($e,$obj) = each %{$ds->{$ATTR_MUSIC}}) {
@@ -156,8 +156,8 @@ sub regenerateFromJSON {
     
     #and let's get rid of the drum and rhythm loops
     #since they tend to define the feel of the piece
-    if ($loops) {
-      while (my ($k,$insts) = each %$loops) {
+    if ($self->loops) {
+      while (my ($k,$insts) = each %{$self->loops}) {
 	delete $insts->{$DRUM_LOOP};
 	delete $insts->{$RHYTHM_INSTRUMENT};
       }
@@ -180,7 +180,7 @@ sub regenerateFromJSON {
   }
 
   $self->compose($ds->{$ATTR_COMPOSITION});
-  $self->conduct($loops);
+  $self->conduct();
   $self->rename();
 }
 
@@ -200,13 +200,12 @@ sub compose {
 
 sub conduct {
   my $self = shift;
-  my $loops = shift;
   my $conductor = AutoHarp::Conductor->new();
   my $song = $conductor->conduct({$ATTR_COMPOSER => $self->{$ATTR_COMPOSER},
 				  $ATTR_MUSIC => $self->{$SONG_ELEMENT},
 				  $ATTR_INSTRUMENTS => $self->instruments(),
 				  $ATTR_HOOK => $self->hook,
-				  $ATTR_LOOPS => $loops
+				  $ATTR_LOOPS => $self->loops,
 				 });
   $self->song($song);
 }
@@ -326,6 +325,10 @@ sub song {
   return $self->objectAccessor($ATTR_SONG, @_);
 }
 
+sub loops {
+  $_[0]->scalarAccessor($ATTR_LOOPS,$_[1]);
+}
+
 sub instruments {
   my $self = shift;
   my $insts = shift;
@@ -432,9 +435,9 @@ sub write {
     }
   }
 
-
+  $self->loops($loops);
   $song->out($self->MIDIOut());
-  $self->writeJSONFile($loops);
+  $self->writeJSONFile();
   eval {
     $self->writeQuickFile();
   };
@@ -445,7 +448,6 @@ sub write {
 
 sub writeJSONFile {
   my $self  = shift;
-  my $loops = shift;
   my $outJson = $self->JSONOut();
   open(FILE, ">$outJson") or confess "Couldn't open $outJson for writing: $!\n";
   my $mData = {map {$_ => $self->{$SONG_ELEMENT}{$_}->toDataStructure()} 
@@ -473,7 +475,7 @@ sub writeJSONFile {
       values %{$self->{$ATTR_INSTRUMENTS}}
      ],
      $ATTR_COMPOSITION => [map {$_->toDataStructure()} @$cData],
-     $ATTR_LOOPS => $loops
+     $ATTR_LOOPS => $self->loops()
     };
   print FILE JSON->new()->pretty()->canonical()->encode($outData);
   close(FILE);
