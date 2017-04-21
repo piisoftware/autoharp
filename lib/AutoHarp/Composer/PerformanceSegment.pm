@@ -36,7 +36,7 @@ sub dump {
 sub time {
   my $self = shift;
   my $time = shift;
-  if ($time != undef) {
+  if (length($time)) {
     $self->SUPER::time($time);
     if ($self->hasPerformances()) {
       while (my ($uid, $data) = each %{$self->{$PERFORMANCES}}) {

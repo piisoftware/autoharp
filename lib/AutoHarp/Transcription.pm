@@ -96,6 +96,33 @@ sub regenerateFromQuickFile {
   $self->rename();
 }
 
+sub regenerateFromMIDI {
+  my $class = shift;
+  my $file  = shift;
+
+  my $name   = ($file =~ /(.+)\.mid/)[0];
+  my $scores = AutoHarp::Events->fromFile($file);
+  my $guide  = shift(@$scores);
+  die "DIDN'T DO THIS YET, MIGHT BE USEFUL SOME DAY";
+  my $instruments = [map {AutoHarp::Instrument->fromEvents($_)} @$scores];
+  my $markers     = [grep {$_->isMarker()} @$guide];
+  my $time2Tag = sub {
+    my $time = shift;
+    my $last;
+    foreach my $m (@$markers) {
+      if ($time < $m->time) {
+	last;
+      }
+      $last = lc(($m->value() =~ /(\w+)/)[0]);
+    }
+    return $last;
+  };
+  #TODO: some day be more versatile than 4 bar blocks
+  my $segmentSize = $guide->clockAt(0)->measureTime() * 4;
+  #TODO: the rest of this
+}
+
+
 sub regenerateFromJSON {
   my $class    = shift;
   my $file     = shift;

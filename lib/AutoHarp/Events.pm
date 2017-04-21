@@ -372,7 +372,7 @@ sub time {
       my $delta = $arg - $zeroEvent->time;
       foreach (@$self) {
 	my $t = $_->time;
-	$_->time($t + $delta);
+	my $is = $_->time($t + $delta);
       }
     }
     return $zeroEvent->time;

@@ -35,12 +35,6 @@ sub hasSegments {
 sub addSegment {
   my $self    = shift;
   my $segment = shift;
-  if ($self->hasSegments()) {
-    my $last = $self->segments->[-1];
-    if ($segment->time != $last->reach) {
-      confess sprintf "Adding a segment at time %d immediately after segment #%d ending at %d",$segment->time(),scalar @{$self->{$SEGMENTS}}, $last->reach();
-    }
-  }
   push(@{$self->{$SEGMENTS}},$segment);
 }
 
@@ -50,6 +44,20 @@ sub spliceSegment {
   my $where   = shift;
   splice(@{$self->{$SEGMENTS}},$where,0,$segment);
   $self->retimeSegments();
+}
+
+sub cutSegment {
+  my $self = shift;
+  my $segment = shift;
+  my $uid  = $segment->uid;
+  my $idx  = -1;
+  grep {$self->{$SEGMENTS}->[$_]->uid == $uid && ($idx = $_)}
+    (0..$#{$self->{$SEGMENTS}});
+  if ($idx >= 0) {
+    splice(@{$self->{$SEGMENTS}},$idx,1);
+    return 1;
+  }
+  return;
 }
 
 sub retimeSegments {

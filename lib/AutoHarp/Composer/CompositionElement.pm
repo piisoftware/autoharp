@@ -61,7 +61,7 @@ sub dump {
 sub time {
   my $self = shift;
   my $time = shift;
-  if ($time != undef) {
+  if (length($time)) {
     $self->{$ATTR_TIME} = $time;
     if ($self->hasMusicBox()) {
       $self->musicBox->time($time);

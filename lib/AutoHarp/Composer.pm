@@ -181,7 +181,7 @@ sub addToComposition {
   my $self = shift;
   my $elt = shift;
   my $idx = shift;
-  if ($idx != undef && $idx < scalar @{$self->{$ATTR_COMPOSITION}}) {
+  if (length($idx) && $idx < scalar @{$self->{$ATTR_COMPOSITION}}) {
     splice(@{$self->{$ATTR_COMPOSITION}},$idx,0,$elt);
     if ($idx > 0) {
       $elt->transition($self->{$ATTR_COMPOSITION}->[$idx - 1]->transition);

@@ -55,7 +55,7 @@ sub startServer {
   print $S_HANDLE "load /usr/local/lib/GeneralUser/fluidsynth.sf2\n";
   $S_HANDLE->autoflush(1);
 
-  #sleep(2);
+  sleep(3);
 }
 
 sub stopServer {
@@ -305,15 +305,14 @@ sub cmd_list {
 
   if ($self->needReconduct()) {
     $self->reconduct();
-    
   }
   
   my $perfSegs = $self->transcription()->song()->segments();
   for (my $i = 0; $i < scalar @$perfSegs; $i++) {
     my $seg  =  $perfSegs->[$i];
     my $perfs = $seg->playerPerformances();
-    my @insts = sort map {$_->{$ATTR_INSTRUMENT}->uid} @$perfs;
-    printf "%2d) %12s (%6s): %s\n",($i + 1),$seg->songElement,$seg->musicTag,"(@insts)";
+    my $insts = join(", ",sort @{$seg->players});
+    printf "%2d) %12s (%6s): %s\n",($i + 1),$seg->songElement,$seg->musicTag,$insts;
   }
 }
 
@@ -351,10 +350,6 @@ sub cmd_play {
     
     if (!scalar @{$subSong->segments()}) {
       die "filtering for player $who resulted in no music!";
-    }
-    print "SUBSONG:\n";
-    foreach my $s (@{$subSong->segments()}) {
-      printf "%d => %d\n",$s->time,$s->reach();
     }
     $self->play($subSong);
   }
@@ -500,6 +495,17 @@ sub cmd_repeat {
   my $what = shift;
   $self->cmd_insert($what, $what + 2);
   $self->cmd_insert($what + 1, $what + 3);
+}
+
+sub cmd_cut {
+  my $self = shift;
+  my $what = shift;
+  my $did = 0;
+  foreach my $s (@{$self->specifiedArrayOfSegments($what)}) {
+    $did += $self->transcription->song()->cutSegment($s);
+  }
+  $self->enqueueMsg(sprintf("Cut %d segment(s)",$did));
+  $self->setNeedReconduct();
 }
 
 sub cmd_rethink {
