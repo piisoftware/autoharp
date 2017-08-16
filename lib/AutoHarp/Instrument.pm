@@ -1,7 +1,7 @@
 package AutoHarp::Instrument;
 
+use AutoHarp::Generator::Magenta;
 use AutoHarp::Constants;
-use AutoHarp::Generator;
 use AutoHarp::Event;
 use AutoHarp::Scale;
 use AutoHarp::Clock;
@@ -42,10 +42,8 @@ our $instrumentFamilies =
    'sound effects' => [120..127]
   };
 
-my $INSTRUMENTS_THAT_SOUND_LIKE_ASS =
-  {
-   109 => 'fuck you, bagpipe',
-  };
+#hell, who am I to judge?
+my $INSTRUMENTS_THAT_SOUND_LIKE_ASS = {};
 
 sub Classes {
   return [
@@ -157,12 +155,9 @@ sub fromString {
 sub band {
   my $class = shift;
   my $band = {};
-  my $themes = pickOne(1,2);
   my @i = grep {!/(\w+)Bass/} @{AutoHarp::Instrument::Classes()};
-  
-  for (1..$themes) {
-    push(@i, $THEME_INSTRUMENT);
-  }
+
+  my $sawMelody;
   foreach my $i (@i) {
     my $inst = $class->new($ATTR_INSTRUMENT_CLASS => $i); 
     my $uid  = $i;
@@ -172,6 +167,12 @@ sub band {
     }
     $inst->uid($uid);
     $band->{$uid} = $inst;
+    $sawMelody = ($inst->is($THEME_INSTRUMENT) && $inst->is($ATTR_MELODY));
+  }
+  if (!$sawMelody) {
+    my $melInst = $class->new($ATTR_INSTRUMENT_CLASS => $THEME_INSTRUMENT);
+    $melInst->themeIdentity($ATTR_MELODY);
+    $band->{$THEME_INSTRUMENT . "_" . $ATTR_MELODY} = $melInst;
   }
   return $band;
 }

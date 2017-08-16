@@ -19,6 +19,7 @@ use base qw(AutoHarp::Class);
 my $VERBOSE  = !$ENV{AUTOHARP_QUIET};
 my $PLAY_LOG = 'playLog';
 my $LOOP_ID  = 'loop_id';
+my $LYRIC_GUIDE = 'lyricGuide';
 
 #allow instruments to follow other instruments in the band
 sub handleFollowing {
@@ -76,10 +77,16 @@ sub conductSegment {
   #start by getting the drummer...
   #drummer will define the rhythm for everybody else 
   #(assuming there is one).
-  my $drummer       = (grep {$_->isDrums()} values %$instMap)[0];  
+  my $drummer       = (grep {$_->isDrums()} values %$instMap)[0];
+  my $melody        = (grep {$_->is($THEME_INSTRUMENT) &&
+			       $_->is($ATTR_MELODY)} values %$instMap)[0];
+  if (!$melody) {
+    confess "WTF? Where's the melody?";
+  }
+
   my $drummerDecision;
   my $drummerUid;
-  
+
   if ($drummer) {
     $drummerUid = $drummer->uid();
     my $dLoop   = $loops->{$drummerUid};
@@ -315,6 +322,7 @@ sub conduct {
 					      $ATTR_HOOK => $args->{$ATTR_HOOK},
 					      %$musicMap});
   print "Conducting segments...\n" if ($VERBOSE);
+  $self->{$LYRIC_GUIDE} = [];
   foreach my $segment (@$pSegs) {
     my $segmentLoops = ($loops) ? $loops->{$segment->uid} : {};
 
@@ -378,7 +386,7 @@ sub handlePlay {
       $play->dump;
       printf "for %d to %d\n",$segment->time,$segment->reach;
       $segment->musicBox->dump();
-      confess "That seemed bad, so I died";
+      print "That seems weird, but Ima let it go for now.";
     }
     if ((scalar grep {$_->pitch < 12} @{$play->notes()}) > 4) {
       printf "%s is playing a buncha crap that has low notes in it\n",$inst->instrumentClass;
@@ -387,6 +395,28 @@ sub handlePlay {
     }
     
     $inst->isPlaying(1);
+    return 1;
+  }
+  return;
+}
+
+sub lyricGuide {
+  my $self = shift;
+  return $self->{$LYRIC_GUIDE} || [];
+}
+
+sub addLyricGuide {
+  my $self    = shift;
+  my $segment = shift;
+  
+  if ($segment->musicTag() eq $segment->songElement()) {
+    #this a part that someone would sing (like a verse)
+    push(@{$self->{$LYRIC_GUIDE}},
+	 {$SONG_ELEMENT => $segment->songElement(),
+	  $ATTR_PROGRESSION => ($segment->music->hasProgression) ?
+	  $segment->music->progression->toString($segment->music->guide) : ""
+	 }
+	);
     return 1;
   }
   return;

@@ -21,6 +21,16 @@ sub new {
   return $self;
 }
 
+sub fromFile {
+  my $class = shift;
+  my $rows  = $class->SUPER::fromFile(@_);
+  my $rowCt = scalar @$rows;
+  if ($rowCt == 2) {
+    return bless $rows->[1], $class;
+  }
+  croak "file $_[1] produced $rowCt rows in Melody->fromFile. That probably wasn't what you want."
+}
+
 sub fromScoreEvents {
   my $class     = shift;
   my $melody    = [
@@ -48,6 +58,17 @@ sub toDataStructure {
   my $self     = shift;
   my $guide    = shift;
   return [map {AutoHarp::Notation::Melody2String($_,$guide)} values %{$self->split()}];
+}
+
+sub toFile {
+  my $self = shift;
+  my $file = shift;
+  my $clone = $self->clone();
+  $clone->time(0);
+  my $op = MIDI::Opus->new({format => 1,
+			    ticks => $TICKS_PER_BEAT,
+			    tracks => [$clone->track()]});
+  return $op->write_to_file($file);
 }
 
 #split myself into melodies with no overlapping notes

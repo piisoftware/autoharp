@@ -1,0 +1,99 @@
+#!/usr/bin/env perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use Getopt::Long;
+
+use AutoHarp::Transcription;
+use AutoHarp::Instrument;
+use AutoHarp::MusicBox::Hook;
+use AutoHarp::Constants;
+use AutoHarp::Model::Genre;
+use AutoHarp::Fuzzy;
+use AutoHarp::Config;
+
+use strict;
+
+my $tempo;
+my $meter;
+my $key;
+my $hook;
+
+
+while (1) {
+  my $genre     = pickOne(AutoHarp::Model::Genre->all());
+  my $genreName = $genre->name();
+  my $transcription = AutoHarp::Transcription->new();
+  my $guide = $transcription->constructGuideForGenre($genre);
+
+  $transcription->name("$genreName-" . time());
+  $transcription->instruments(AutoHarp::Instrument->band());
+
+  constructMusicForMagenta($transcription, $guide);
+  
+  print "Composing...\n";
+  $transcription->compose();
+  print "Conducting...\n";
+  eval {
+    $transcription->conduct();
+  };
+  if ($@) {
+    print "That fucking failed: $@\n";
+    next;
+  }
+  print "Done.\n";
+  print "Song Settings: ";
+  my $clock;
+  my $scale;
+  if ($transcription->verse) {
+    $clock   = $transcription->verse->guide->clock;
+    $scale   = $transcription->verse->guide->scale;
+  }
+  print AutoHarp::Notation::CreateHeader($ATTR_CLOCK => $clock,
+					 $ATTR_GENRE => $genre,
+					 $ATTR_SCALE => $scale
+					);
+  print "\n";
+  printf "MIDI file is %s\n",$transcription->MIDIOut();
+  printf "JSON file is %s\n",$transcription->JSONOut();
+  printf "Quickfile is %s\n",$transcription->QuickOut();
+  
+  print "Writing transcription...\n";
+  eval {
+    $transcription->write();
+  };
+  if ($@) {
+    print "That too fucking failed: $@\n";
+  }
+}
+
+sub constructMusicForMagenta {
+  my $transcription = shift;
+  my $guide = shift;
+
+  my $gen   = AutoHarp::Generator::Magenta->new();
+  my $elts  = [$SONG_ELEMENT_VERSE,
+	       $SONG_ELEMENT_CHORUS,
+	       $SONG_ELEMENT_BRIDGE];
+  if (rarely) {
+    splice(@$elts, 1, 0, $SONG_ELEMENT_PRECHORUS);
+  }
+
+  my $source;    
+  foreach my $elt (@$elts) {
+    my $ng = $guide->clone();
+    if ($elt eq $SONG_ELEMENT_PRECHORUS) {
+      #halve the length
+      $ng = $guide->subList($guide->time, ($guide->reach - $guide->time) / 2);
+    }
+    my $m = $gen->generateMusic($ng, $source);
+    $m->tag($elt);
+    $transcription->element($elt, $m);
+    $source = $m;
+  }
+
+  $transcription->hook($gen->generateHook(pickOne($transcription->verse, $transcription->chorus)));
+}
+
+exit(0);
+

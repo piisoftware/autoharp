@@ -836,7 +836,7 @@ sub toLoop {
     }
     confess sprintf "Writing a %d measure events resulted in a %d measure loop",
       $bars,
-	$loop->events()->measures($guide->clock);
+	($loop->events()) ? $loop->events()->measures($guide->clock) : 0;
   }
   if ($self->isPercussion()) {
     $loop->type($DRUM_LOOP);

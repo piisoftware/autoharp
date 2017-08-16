@@ -6,7 +6,7 @@ use AutoHarp::Config;
 use AutoHarp::Composer;
 use AutoHarp::Conductor;
 use AutoHarp::Constants;
-use AutoHarp::Generator;
+use AutoHarp::Generator::Magenta;
 use AutoHarp::Instrument;
 use AutoHarp::Fuzzy;
 
@@ -281,7 +281,7 @@ sub completeMusicBase {
   my $self  = shift;
   my $guide = shift;
 
-  my $gen   = AutoHarp::Generator->new();
+  my $gen   = AutoHarp::Generator::Magenta->new();
   my $genre = $guide->genre();
   
   my $source;
@@ -566,6 +566,10 @@ sub MIDIOut {
 
 sub QuickOut {
   return AutoHarp::Config::QuickFile($_[0]->name);
+}
+
+sub LyricsOut {
+  return AutoHarp::Config::LyricFile($_[0]->name);
 }
 
 sub __chooseClockForGenre {

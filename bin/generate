@@ -4,7 +4,6 @@ use lib "$Bin/../lib";
 
 use Getopt::Long;
 
-use AutoHarp::Generator;
 use AutoHarp::Transcription;
 use AutoHarp::Instrument;
 use AutoHarp::MusicBox::Hook;
@@ -45,6 +44,8 @@ GetOptions ("--genre:s" => \$genreName,
 my $verbose = !$silent;
 $ENV{AUTOHARP_QUIET} = $silent;
 
+print "add /Users/marz/miniconda2/envs/magenta/bin and 'source activate magenta' (if you haven't already)\n";
+  
 if ($genreName) {
   $genre = AutoHarp::Model::Genre->loadByName($genreName);
   if ($genre->isEmpty()) {

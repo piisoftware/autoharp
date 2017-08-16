@@ -25,6 +25,15 @@ sub DataDirectory {
   return $dir;
 }
 
+sub LyricDirectory {
+  my $dir = DataDirectory();
+  $dir =~ s/\/data/\/lyrics/;
+  if (!-d $dir) {
+    mkdir($dir);
+  }
+  return $dir;
+}
+
 sub MidiFile {
   my $fileName = shift;
   $fileName =~ s/\.\w+$//;
@@ -32,6 +41,7 @@ sub MidiFile {
   my $dir = MidiDirectory();
   return "$dir$DS$fileName.mid";
 }
+
 
 sub DataFile {
   my $fileName = shift;
@@ -47,6 +57,14 @@ sub QuickFile {
   $fileName =~ s/\s//g;
   my $dir = DataDirectory();
   return "$dir$DS$fileName.quick";
+}
+
+sub LyricFile {
+  my $fileName = shift;
+  $fileName =~ s/\.\w+$//;
+  $fileName =~ s/\s//g;
+  my $dir = LyricDirectory();
+  return "$dir$DS$fileName-lyrics.txt";
 }
 
 sub GenreDBRoot {

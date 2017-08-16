@@ -331,7 +331,7 @@ sub playToRhythmGuide {
       } else {
 	#make it something interesting
 	$notes = [pickOne(@$notes)];
-	my $pitch = AutoHarp::Generator->new()->
+	my $pitch = AutoHarp::Generator::Magenta->new()->
 	  generatePitch({$ATTR_MUSIC => $segment->musicBox(),
 			 $ATTR_PITCH => $lastPitch,
 			 $ATTR_TIME => $time});
@@ -400,7 +400,7 @@ sub buildRhythmGuide {
     }
   } else {
     #gotta fudge it.
-    my $gen = AutoHarp::Generator->new();
+    my $gen = AutoHarp::Generator::Magenta->new();
     if ($useHats) {
       my $fakeHat = ($clock->tempo() < 95) ? 
 	$clock->beatTime() / 4 : $clock->beatTime() / 2;

@@ -134,7 +134,8 @@ sub playDecision {
   } elsif ($self->is($ATTR_MELODY)) {
     #whenever the segment & the music agree 
     #e.g. it's the verse and the music is the verse
-    return ($segment->musicTag() eq $segment->songElement());
+    my $will = ($segment->musicTag() eq $segment->songElement());
+    return $will;
   }
 
   if ($self->isPlaying()) {
@@ -281,7 +282,7 @@ sub followPlay {
       if (!$c || sometimes) {
 	my $pitch = -1;
 	while ($pitch == -1) {
-	  $pitch = AutoHarp::Generator->new()->
+	  $pitch = AutoHarp::Generator::Magenta->new()->
 	    generatePitch({$ATTR_MUSIC => $segment->musicBox(),
 			   $ATTR_TIME => $n->time,
 			   $ATTR_PITCH => $prevPitch
@@ -390,7 +391,7 @@ sub themeCreate {
   my $subMusic = $segment->musicBox->subMusic($segment->time,
 					   $segment->time + $clock->measureTime);
   #melodize it with even beats or half notes...
-  AutoHarp::Generator->new()->melodize($subMusic,{$ATTR_RHYTHM_SPEED => $speed});
+  AutoHarp::Generator::Magenta->new()->melodize($subMusic,{$ATTR_RHYTHM_SPEED => $speed});
 
   if (!$subMusic->melody()->hasNotes()) {
     $subMusic->dump();
@@ -414,7 +415,7 @@ sub flowThemeCreate {
   my $octave = pickOne(5,6,7);
 
   my $prevPitch;
-  my $gen  = AutoHarp::Generator->new();
+  my $gen  = AutoHarp::Generator::Magenta->new();
   my $lastPitch;
   foreach my $c (@{$music->progression->chords()}) {
     #generate as long as the phrase so that we repeat with it
@@ -452,7 +453,7 @@ sub earwormCreate {
   my $clock     = $segment->musicBox->clock();
   my $model     = $segment->musicBox->subMusic($segment->time,
 					    $segment->time + $clock->measureTime);
-  my $mel       = AutoHarp::Generator->new()->generateMelody($model);
+  my $mel       = AutoHarp::Generator::Magenta->new()->generateMelody($model);
   #we'll divvy the beats into quarters, and determine a random start and end
   #within a single measure
   $mel->time(0);

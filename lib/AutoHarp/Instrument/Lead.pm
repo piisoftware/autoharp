@@ -49,7 +49,7 @@ sub play {
     #rhythm split
     my $speed;
     my $music = $segment->musicBox;
-    my $gen = AutoHarp::Generator->new();
+    my $gen = AutoHarp::Generator::Magenta->new();
     foreach my $c (@{$music->progression->chords()}) {
       if (!$speed || sometimes) {
 	$speed = pickOne(2,4,3);

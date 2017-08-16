@@ -1,0 +1,60 @@
+#!/usr/bin/perl
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+use AutoHarp::Lyrics;
+
+
+open(FOO, "$ARGV[0]") or die "NO";
+open(BAR, ">data.txt") or die "WTF?";
+my $n = 4;
+while(<FOO>) {
+  @lines = split(/\",\"/);
+  my @lyricsTokens = split(/\s+/,$lines[4]);
+  my $lineCt;
+  
+  while (scalar @lyricsTokens) {
+    #start from token...I dunno, n = 4 or so?
+    #look over the next, say n +- 2 words for a rhyme. Find one?
+    #great, put line breaks after those words (those are our rhymes)
+    my $breakOne;
+    my $breakTwo;
+  FIRST:
+    for my $i ($n..nextTokenCt + $n) {
+      my $word = $lyricsTokens[$i];
+      my @rhymes = endrhyme($word);
+      for my $j ((2 * $n)..(2 * $n + nextTokenCt)) {
+	foreach my $r (@rhymes) {
+	  if ($lyricsTokens[$j] =~ /$r/i) {
+	    printf "I think %s and %s rhyme...\n",$r,$lyricsTokens[$j];
+	    $breakOne = $i;
+	    $breakTwo = $j;
+	    last FIRST
+	  }
+	}
+      }
+    }
+    if (!($breakOne && $breakTwo)) {
+      #didn't find anything I think is a rhyme
+      $breakOne = nextTokenCt;
+      $breakTwo = nextTokenCt + $breakOne;
+    }
+    for (1..$breakOne) {
+      print BAR shift(@lyricsTokens) . " ";
+    }
+    print BAR "\n";
+    for (($breakOne + 1)..$breakTwo) {
+      print BAR shift(@lyricsTokens) . " ";
+    }
+    print BAR "\n";
+    print BAR "\n" if (!(++$lineCt % 4));
+  }
+  print "Finished $lines[1] ($lines[2])\n";
+}
+
+sub nextTokenCt {
+  my $int = int(rand(3));
+  my $flip = (rand() > 0.5) ? -1 : 1;
+  return 10 + ($int * $flip)
+}
+
+

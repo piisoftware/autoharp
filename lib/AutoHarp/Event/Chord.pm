@@ -69,24 +69,24 @@ my $DIMINISHED_CHORDS =
 
 my $INTERVALS = 
   {0 => {}, #unison; technically a valid interval, but, you know, pointless
-   1 => {$CHORD_NAME => 'flat2'},
+   1 => {$CHORD_NAME => 'b2'},
    2 => {$CHORD_NAME => '2'},
-   3 => {$MAJOR => 'minor3'},
-   4 => {$MINOR => 'major3', $DIMINISHED => 'major3'},
+   3 => {$MAJOR => 'm3'},
+   4 => {$MINOR => 'M3', $DIMINISHED => 'M3'},
    5 => {$CHORD_NAME => '4'},
-   6 => {$MAJOR => 'flat5', $MINOR => 'flat5'},
+   6 => {$MAJOR => 'b5', $MINOR => 'b5'},
    7 => {$DIMINISHED => '5', $NO_THIRD => '5'},
-   8 => {$CHORD_NAME => 'flat6'},
+   8 => {$CHORD_NAME => 'b6'},
    9 => {$CHORD_NAME => '6'},
    10 => {$CHORD_NAME => '7'},
-   11 => {$CHORD_NAME => 'major7'},
-   13 => {$CHORD_NAME => 'flat9'},
+   11 => {$CHORD_NAME => 'M7'},
+   13 => {$CHORD_NAME => 'b9'},
    14 => {$CHORD_NAME => '9'},
-   15 => {$MAJOR => 'sharp9'},
-   16 => {$MINOR => 'flat11'},
+   15 => {$MAJOR => '#9'},
+   16 => {$MINOR => 'b11'},
    17 => {$CHORD_NAME => '11'},
-   18 => {$CHORD_NAME => 'sharp11'},
-   20 => {$CHORD_NAME => 'flat13'},
+   18 => {$CHORD_NAME => '#11'},
+   20 => {$CHORD_NAME => 'b13'},
    21 => {$CHORD_NAME => '13'}
   };
 
@@ -497,7 +497,7 @@ sub toString {
     if ($root) {
       $str = uc($root->letter) . $str;
       if ($data->{$SPELL_BOTTOM_NOTE}) {
-	$str .= " over " . $self->bass->letter;
+	$str .= "/" . $self->bass->letter;
       }
     } 
     $self->[$STR_IDX] = $str;

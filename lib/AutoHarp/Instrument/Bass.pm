@@ -8,7 +8,7 @@ use AutoHarp::Fuzzy;
 use AutoHarp::MusicBox::Base;
 use AutoHarp::Events::Melody;
 use AutoHarp::Constants;
-use AutoHarp::Generator;
+use AutoHarp::Generator::Magenta;
 
 use MIDI;
 use Carp;
@@ -252,7 +252,7 @@ sub freeStyleBass {
 	$scale->transposeToScale($bLine, AutoHarp::Scale->fromChord($chord));
       }
     } else {
-      my $gen = AutoHarp::Generator->new();
+      my $gen = AutoHarp::Generator::Magenta->new();
       my $sm = $segment->musicBox()->subMusic($chord->time,$chord->reach());
       eval {
 	$gen->melodize($sm);
