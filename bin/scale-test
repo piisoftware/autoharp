@@ -1,0 +1,91 @@
+#!/usr/bin/env perl
+use strict;
+
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use MIDI::Opus;
+use AutoHarp::Environment;
+use AutoHarp::Constants;
+use AutoHarp::Config;
+use AutoHarp::Fuzzy;
+use AutoHarp::Events;
+use AutoHarp::Clock;
+use AutoHarp::Event::MetaNote;
+use AutoHarp::MetaScale;
+
+my $steps = $ARGV[0] || 12;
+my $env = AutoHarp::Environment->new();
+
+$env->startServer();
+my $mScale = AutoHarp::MetaScale->new({$ATTR_SCALE_SPAN => $steps});
+
+while (1) {
+  $mScale->dump();
+  print "\n==> ";
+  chomp(my $cmd = <STDIN>);
+  my @tokens = split(/\s+/,$cmd);
+  if ($tokens[0] eq 'scale') {
+    $mScale = AutoHarp::MetaScale->new({$ATTR_SCALE_SPAN => $tokens[1]});
+    $env->midiPlayTracks([getScaleEvents($mScale->getScaleFrequencies())->track()]);
+    next;
+  } elsif ($tokens[0] eq 'q' || $tokens[0] eq 'quit') {
+    last;
+  }
+  my $root = AutoHarp::Event::MetaNote->new({
+					     $ATTR_FREQUENCY => $mScale->rootFrequency(),
+					     $ATTR_TIME => 0,
+					     $ATTR_VELOCITY => hardVelocity(),
+					     $ATTR_DURATION => $TICKS_PER_BEAT * 4,
+					    });
+  my $events = [AutoHarp::Events->new($root->toNotes())];
+  printf "Playing %s with\n",$root->toString();
+  foreach my $t (@tokens) {
+    my ($n,$d) = split(/\:/,$t);
+    if ($n > 0 && $d > 0) {
+      my $nf = $mScale->rootFrequency() * ($n/$d);
+      my $mn = AutoHarp::Event::MetaNote->new({
+					       $ATTR_FREQUENCY => $nf,
+					       $ATTR_TIME => 0,
+					       $ATTR_VELOCITY => hardVelocity(),
+					       $ATTR_DURATION => $TICKS_PER_BEAT * 4,
+					      });
+
+      printf "\t%s\n",$mn->toString();
+      push(@$events,AutoHarp::Events->new($mn->toNotes()));
+    } else {
+      print "Don't recognize $t\n";
+    }
+  }
+  if (scalar @$events > 1) {
+    my $chan = 0;
+    foreach my $e (@$events) {
+      $e->channel($chan++);
+      $e->dump();
+      print "\n";
+    }
+    $env->midiPlayTracks([map {$_->track()} @$events]);
+  }
+}
+$env->stopServer();
+exit(0);
+
+sub getScaleEvents {
+  my $freqs = shift;
+  my $track = [];
+  my $time = 0;
+
+  print "Generated Scale:\n";
+  foreach my $f (@$freqs) {
+    my $note = AutoHarp::Event::MetaNote->new({$ATTR_FREQUENCY => $f,
+					       $ATTR_TIME => $time,
+					       $ATTR_VELOCITY => hardVelocity(),
+					       $ATTR_DURATION => $TICKS_PER_BEAT / 2,
+					      });
+    push(@$track, @{$note->toNotes()});
+    $time += $note->duration();
+    printf "\t%s\n",$note->toString();
+  }
+  return AutoHarp::Events->new($track);
+}
+    

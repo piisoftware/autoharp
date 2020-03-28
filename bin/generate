@@ -124,7 +124,7 @@ if ($verbose) {
 
 
 print "Writing transcription...\n" if ($verbose);
-$transcription->write();
+#$transcription->write();
 
 AutoHarp::Config::Play($transcription->song);
 

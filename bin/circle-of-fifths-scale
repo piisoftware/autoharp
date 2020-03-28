@@ -1,0 +1,80 @@
+#!/usr/bin/env perl
+use strict;
+
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use MIDI::Opus;
+use AutoHarp::Environment;
+use AutoHarp::Constants;
+use AutoHarp::Config;
+use AutoHarp::Fuzzy;
+use AutoHarp::Events;
+use AutoHarp::Clock;
+use AutoHarp::Event::MetaNote;
+use AutoHarp::MetaScale;
+
+my $steps = $ARGV[0] || 12;
+my $env = AutoHarp::Environment->new();
+
+$env->startServer();
+my @cofs = (440);
+print "$cofs[0]\n";
+for (1..12) {
+  $cofs[$_] = $cofs[$_ - 1] * 1.5;
+  if ($cofs[$_] >= 893) {
+    $cofs[$_] /= 2;
+  }
+  print "$cofs[$_]\n";
+}
+@cofs = sort {$a <=> $b} @cofs;
+
+my $time = 0;
+my $events = [];
+foreach my $f (@cofs) {
+  my $mn = AutoHarp::Event::MetaNote->new({
+					   $ATTR_FREQUENCY => $f,
+					   $ATTR_TIME => $time += $TICKS_PER_BEAT,
+					   $ATTR_VELOCITY => hardVelocity(),
+					   $ATTR_DURATION => $TICKS_PER_BEAT,
+					  });
+  push(@$events, @{$mn->toNotes()});
+  print $mn->toString();
+  print "\n";
+}
+$env->midiPlayTracks([AutoHarp::Events->new($events)->track()]);
+
+my $one = AutoHarp::Events->new
+  (AutoHarp::Event::MetaNote->new({
+				$ATTR_FREQUENCY => $cofs[5],
+				$ATTR_TIME => 0,
+				$ATTR_VELOCITY => hardVelocity(),
+				$ATTR_DURATION => $TICKS_PER_BEAT * 4,
+			       })->toNotes());
+my $two = AutoHarp::Events->new
+  (AutoHarp::Event::MetaNote->new({
+				$ATTR_FREQUENCY => $cofs[9],
+				$ATTR_TIME => 0,
+				$ATTR_VELOCITY => hardVelocity(),
+				$ATTR_DURATION => $TICKS_PER_BEAT * 4,
+			       })->toNotes());
+
+my $three = AutoHarp::Events->new
+  (AutoHarp::Event::MetaNote->new({
+				$ATTR_FREQUENCY => $cofs[12],
+				$ATTR_TIME => 0,
+				$ATTR_VELOCITY => hardVelocity(),
+				$ATTR_DURATION => $TICKS_PER_BEAT * 4,
+			       })->toNotes());
+my $four = AutoHarp::Events->new
+  (AutoHarp::Event::MetaNote->new({
+				$ATTR_FREQUENCY => $cofs[4],
+				$ATTR_TIME => 0,
+				$ATTR_VELOCITY => hardVelocity(),
+				$ATTR_DURATION => $TICKS_PER_BEAT * 4,
+			       })->toNotes());
+$env->midiPlayTracks([$one->track(),$two->track(),$three->track()]);
+#$env->midiPlayTracks([$one->track(),$two->track(),$four->track()]);
+
+$env->stopServer();
+exit(0);
